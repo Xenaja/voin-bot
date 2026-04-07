@@ -1,7 +1,7 @@
-const Database = require('better-sqlite3');
+const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 
-const db = new Database(path.join(__dirname, '../data/users.db'));
+const db = new DatabaseSync(path.join(__dirname, '../data/users.db'));
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -9,16 +9,15 @@ db.exec(`
     platform       TEXT NOT NULL,
     chat_id        TEXT NOT NULL,
     state          TEXT NOT NULL,
-    updated_at     DATETIME DEFAULT (datetime('now')),
+    updated_at     TEXT DEFAULT (datetime('now')),
     reminder_count INTEGER DEFAULT 0,
     UNIQUE(platform, chat_id)
   )
 `);
 
 function getUser(platform, chatId) {
-  return db
-    .prepare('SELECT * FROM users WHERE platform = ? AND chat_id = ?')
-    .get(platform, String(chatId)) || null;
+  const stmt = db.prepare('SELECT * FROM users WHERE platform = ? AND chat_id = ?');
+  return stmt.get(platform, String(chatId)) || null;
 }
 
 function upsertUser(platform, chatId, state) {

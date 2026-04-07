@@ -17,8 +17,7 @@ async function send(chatId, result) {
     if (msg.button) {
       params.keyboard = Keyboard.builder()
         .textButton({ label: msg.button.label, payload: { action: msg.button.callback } })
-        .oneTime()
-        .build();
+        .oneTime();
     }
     await vk.api.messages.send(params);
   }
@@ -56,46 +55,81 @@ async function sendText(chatId, text) {
   });
 }
 
-function start() {
-  vk = new VK({ token: config.VK_TOKEN });
+async function handleMessage(obj) {
+  const chatId = String(obj.peer_id);
+  const text = obj.text || '';
+  let payload = null;
+  try { payload = obj.payload ? JSON.parse(obj.payload) : null; } catch {}
 
-  vk.updates.on('message_new', async (context) => {
-    const chatId = String(context.peerId);
-    const text = context.text || '';
-    const payload = context.messagePayload;
+  console.log('[vk] message:', { chatId, text, payload });
 
-    try {
-      // Нажатие кнопки — определяем по payload
-      if (payload && payload.action === 'next_1') {
-        const result = flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_1' });
-        await send(chatId, result);
-        return;
-      }
-      if (payload && payload.action === 'next_2') {
-        const result = flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_2' });
-        await send(chatId, result);
-        return;
-      }
-
-      // Триггерные слова — запуск воронки (проверка «содержит»)
-      const lower = text.toLowerCase();
-      if (TRIGGER_WORDS.some(word => lower.includes(word))) {
-        const result = flow.handleAction({ platform: 'vk', chatId, action: 'START' });
-        await send(chatId, result);
-        return;
-      }
-
-      // Обычный текст
-      const result = flow.handleAction({ platform: 'vk', chatId, action: 'TEXT', text });
-      await send(chatId, result);
-    } catch (err) {
-      console.error('[vk] message_new error:', err.message);
+  try {
+    if (payload?.action === 'next_1') {
+      return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_1' }));
     }
+    if (payload?.action === 'next_2') {
+      return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_2' }));
+    }
+    const lower = text.toLowerCase();
+    if (TRIGGER_WORDS.some(w => lower.includes(w))) {
+      return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'START' }));
+    }
+    await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'TEXT', text }));
+  } catch (err) {
+    console.error('[vk] handle error:', err.message);
+  }
+}
+
+async function startLongPoll() {
+  // Включаем нужные события
+  await vk.api.groups.setLongPollSettings({
+    group_id:    Number(config.VK_GROUP_ID),
+    enabled:     1,
+    api_version: '5.131',
+    message_new: 1,
   });
 
-  vk.updates.start({ pollingGroupId: Number(config.VK_GROUP_ID) });
-  console.log('[vk] bot started');
+  let lp = await vk.api.groups.getLongPollServer({ group_id: Number(config.VK_GROUP_ID) });
+  let { server, key } = lp;
+  let ts = lp.ts;
 
+  console.log('[vk] long poll started, server:', server);
+
+  while (true) {
+    try {
+      const url = `${server}?act=a_check&key=${key}&ts=${ts}&wait=25`;
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if (data.failed) {
+        console.log('[vk] long poll failed:', data.failed, '— reconnecting');
+        lp = await vk.api.groups.getLongPollServer({ group_id: Number(config.VK_GROUP_ID) });
+        server = lp.server;
+        key = lp.key;
+        ts = lp.ts;
+        continue;
+      }
+
+      ts = data.ts;
+
+      for (const update of data.updates || []) {
+        console.log('[vk] event:', update.type);
+        if (update.type === 'message_new') {
+          const msg = update.object?.message;
+          if (msg) await handleMessage(msg);
+        }
+      }
+    } catch (err) {
+      console.error('[vk] long poll error:', err.message, '— retry in 3s');
+      await new Promise(r => setTimeout(r, 3000));
+    }
+  }
+}
+
+function start() {
+  vk = new VK({ token: config.VK_TOKEN });
+  startLongPoll().catch(err => console.error('[vk] fatal:', err.message));
+  console.log('[vk] bot started');
   return { send, sendText };
 }
 
