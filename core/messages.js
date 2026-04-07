@@ -122,7 +122,7 @@ module.exports = {
 
   FALLBACK_COMPLETED: `Твои файлы уже у тебя 🙏🏼 Если что-то не открывается — напиши, разберёмся.`,
 
-  FALLBACK_MID_FUNNEL: `Нажми кнопку выше, чтобы продолжить 👆🏼`,
+  FALLBACK_MID_FUNNEL: `Нажми кнопку ниже, чтобы продолжить 👇🏼`,
 
   FALLBACK_IDLE: {
     telegram: `Напиши /start, чтобы начать 🙏🏼`,

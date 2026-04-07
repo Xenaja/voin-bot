@@ -2,6 +2,7 @@ const { VK, Keyboard } = require('vk-io');
 const fs = require('fs');
 const config = require('../config');
 const flow = require('../core/flow');
+const { handleAdminCommand } = require('../core/admin');
 
 const TRIGGER_WORDS = ['старт', 'start', 'начать', 'привет', 'хочу'];
 
@@ -55,13 +56,73 @@ async function sendText(chatId, text) {
   });
 }
 
-async function handleMessage(obj) {
-  const chatId = String(obj.peer_id);
-  const text = obj.text || '';
-  let payload = null;
-  try { payload = obj.payload ? JSON.parse(obj.payload) : null; } catch {}
+async function notifyManager(chatId, platform, text) {
+  const platformLabel = platform === 'vk' ? 'VK' : 'Telegram';
+  const msg = `💬 Сообщение вне сценария\n[${platformLabel}] ID: ${chatId}\n\n"${text}"`;
+  try {
+    await vk.api.messages.send({
+      user_id:   config.MANAGER_VK_ID,
+      message:   msg,
+      random_id: Math.random() * 1e9 | 0,
+    });
+  } catch (err) {
+    console.error('[vk] notifyManager error:', err.message);
+  }
+}
 
-  console.log('[vk] message:', { chatId, text, payload });
+async function handleAdminMessage(text) {
+  const result = handleAdminCommand(text);
+
+  if (result.broadcast && result.broadcast.length > 0) {
+    for (const item of result.broadcast) {
+      try {
+        if (item.platform === 'vk') {
+          await sendText(item.chatId, item.text);
+        }
+        // Telegram broadcast — через telegram adapter (пока только VK)
+      } catch (err) {
+        console.error('[vk] broadcast error:', err.message);
+      }
+    }
+  }
+
+  if (result.file) {
+    // Отправляем CSV как документ
+    const buf = Buffer.from(result.file.content, 'utf-8');
+    const doc = await vk.upload.messageDocument({
+      peer_id: config.ADMIN_VK_ID,
+      source:  { value: buf, filename: result.file.filename, contentType: 'text/csv' },
+    });
+    await vk.api.messages.send({
+      user_id:    config.ADMIN_VK_ID,
+      message:    result.text,
+      attachment: `doc${doc.owner_id}_${doc.id}`,
+      random_id:  Math.random() * 1e9 | 0,
+    });
+    return;
+  }
+
+  await vk.api.messages.send({
+    user_id:   config.ADMIN_VK_ID,
+    message:   result.text,
+    random_id: Math.random() * 1e9 | 0,
+  });
+}
+
+async function handleMessage(msg) {
+  const chatId = String(msg.peer_id);
+  const fromId = msg.from_id;
+  const text = msg.text || '';
+  let payload = null;
+  try { payload = msg.payload ? JSON.parse(msg.payload) : null; } catch {}
+
+  console.log('[vk] message:', { chatId, fromId, text, payload });
+
+  // Сообщение от админа — обрабатываем команды
+  if (fromId === config.ADMIN_VK_ID && text.startsWith('/')) {
+    try { await handleAdminMessage(text); } catch (err) { console.error('[vk] admin error:', err.message); }
+    return;
+  }
 
   try {
     if (payload?.action === 'next_1') {
@@ -70,18 +131,25 @@ async function handleMessage(obj) {
     if (payload?.action === 'next_2') {
       return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_2' }));
     }
+
     const lower = text.toLowerCase();
     if (TRIGGER_WORDS.some(w => lower.includes(w))) {
       return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'START' }));
     }
-    await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'TEXT', text }));
+
+    const result = flow.handleAction({ platform: 'vk', chatId, action: 'TEXT', text });
+    await send(chatId, result);
+
+    // Уведомить менеджера если сообщение вне сценария
+    if (result.notifyManager && result.originalText) {
+      await notifyManager(chatId, 'vk', result.originalText);
+    }
   } catch (err) {
     console.error('[vk] handle error:', err.message);
   }
 }
 
 async function startLongPoll() {
-  // Включаем нужные события
   await vk.api.groups.setLongPollSettings({
     group_id:    Number(config.VK_GROUP_ID),
     enabled:     1,
@@ -113,7 +181,6 @@ async function startLongPoll() {
       ts = data.ts;
 
       for (const update of data.updates || []) {
-        console.log('[vk] event:', update.type);
         if (update.type === 'message_new') {
           const msg = update.object?.message;
           if (msg) await handleMessage(msg);

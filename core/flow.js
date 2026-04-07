@@ -7,7 +7,7 @@ function handleAction({ platform, chatId, action, text }) {
 
   // COMPLETED — ничего нового не происходит, включая /start
   if (state === 'COMPLETED') {
-    return { messages: [{ text: messages.FALLBACK_COMPLETED }], files: [], newState: null };
+    return { messages: [{ text: messages.FALLBACK_COMPLETED }], files: [], newState: null, notifyManager: true, originalText: text };
   }
 
   // START — всегда перезапускает воронку (кроме COMPLETED выше)
@@ -21,7 +21,7 @@ function handleAction({ platform, chatId, action, text }) {
   }
 
   if (action === 'BTN_NEXT_1') {
-    if (state !== 'MSG1_SENT') return { messages: [], files: [], newState: null }; // устаревшая кнопка
+    if (state !== 'MSG1_SENT') return { messages: [], files: [], newState: null };
     store.upsertUser(platform, chatId, 'MSG2_SENT');
     return {
       messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' } }],
@@ -31,7 +31,7 @@ function handleAction({ platform, chatId, action, text }) {
   }
 
   if (action === 'BTN_NEXT_2') {
-    if (state !== 'MSG2_SENT') return { messages: [], files: [], newState: null }; // устаревшая кнопка
+    if (state !== 'MSG2_SENT') return { messages: [], files: [], newState: null };
     store.upsertUser(platform, chatId, 'AWAIT_PAYMENT');
     return {
       messages: [{ text: messages.MSG_3 }],
@@ -71,18 +71,33 @@ function handleAction({ platform, chatId, action, text }) {
           newState: 'COMPLETED',
         };
       }
+      // Написал что-то вместо ГОТОВО — уведомить менеджера
       return {
         messages: [{ text: messages.FALLBACK_PAYMENT[platform] }],
         files: [],
         newState: null,
+        notifyManager: true,
+        originalText: text,
       };
     }
 
-    if (state === 'MSG1_SENT' || state === 'MSG2_SENT') {
+    if (state === 'MSG1_SENT') {
       return {
-        messages: [{ text: messages.FALLBACK_MID_FUNNEL }],
+        messages: [{ text: messages.FALLBACK_MID_FUNNEL, button: { label: messages.BTN_MSG1, callback: 'next_1' } }],
         files: [],
         newState: null,
+        notifyManager: true,
+        originalText: text,
+      };
+    }
+
+    if (state === 'MSG2_SENT') {
+      return {
+        messages: [{ text: messages.FALLBACK_MID_FUNNEL, button: { label: messages.BTN_MSG2, callback: 'next_2' } }],
+        files: [],
+        newState: null,
+        notifyManager: true,
+        originalText: text,
       };
     }
 
@@ -91,6 +106,8 @@ function handleAction({ platform, chatId, action, text }) {
       messages: [{ text: messages.FALLBACK_IDLE[platform] }],
       files: [],
       newState: null,
+      notifyManager: true,
+      originalText: text,
     };
   }
 

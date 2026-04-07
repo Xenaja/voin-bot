@@ -7,6 +7,11 @@ module.exports = {
 
   SBER_LINK: 'https://messenger.online.sberbank.ru/sl/8T3iVSXMkI7jBI1oI',
 
+  // Менеджер получает уведомления о сообщениях вне сценария
+  MANAGER_VK_ID: 1104677909,
+  // Админ — команды /stats, /export, /broadcast и др.
+  ADMIN_VK_ID: 103652699,
+
   FILES: {
     guide:     './assets/guide.pdf',
     tracker:   './assets/tracker.pdf',
