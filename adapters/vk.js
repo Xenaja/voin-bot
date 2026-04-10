@@ -15,33 +15,60 @@ async function send(chatId, result) {
       message:   msg.text,
       random_id: Math.random() * 1e9 | 0,
     };
-    if (msg.button) {
-      params.keyboard = Keyboard.builder()
-        .textButton({ label: msg.button.label, payload: { action: msg.button.callback } })
-        .oneTime();
+
+    if (msg.banner) {
+      const photo = await vk.upload.messagePhoto({
+        peer_id: Number(chatId),
+        source:  { value: fs.createReadStream(msg.banner) },
+      });
+      const ownerId = photo.owner_id ?? photo.ownerId;
+      params.attachment = `photo${ownerId}_${photo.id}`;
     }
+
+    if (msg.button) {
+      params.keyboard = JSON.stringify({
+        one_time: true,
+        buttons: [[{
+          action: {
+            type: 'text',
+            label: msg.button.label,
+            payload: JSON.stringify({ action: msg.button.callback }),
+          },
+          color: 'primary',
+        }]],
+      });
+    }
+
     await vk.api.messages.send(params);
   }
 
+  const filenames = { combined: 'Гайд+Трекер.pdf', guide: 'Гайд.pdf', tracker: 'Трекер.pdf' };
+
   for (const fileKey of result.files) {
-    if (fileKey === 'wallpaper') {
-      const photo = await vk.upload.messagePhoto({
-        peer_id: Number(chatId),
-        source:  { value: fs.createReadStream(config.FILES.wallpaper) },
-      });
-      await vk.api.messages.send({
-        peer_id:    Number(chatId),
-        attachment: `photo${photo.owner_id}_${photo.id}`,
-        random_id:  Math.random() * 1e9 | 0,
-      });
+    if (fileKey === 'wallpapers') {
+      for (const photoPath of config.FILES.wallpapers) {
+        const photo = await vk.upload.messagePhoto({
+          peer_id: Number(chatId),
+          source:  { value: fs.createReadStream(photoPath) },
+        });
+        const ownerId = photo.owner_id ?? photo.ownerId;
+        await vk.api.messages.send({
+          peer_id:    Number(chatId),
+          message:    ' ',
+          attachment: `photo${ownerId}_${photo.id}`,
+          random_id:  Math.random() * 1e9 | 0,
+        });
+      }
     } else {
       const doc = await vk.upload.messageDocument({
         peer_id: Number(chatId),
-        source:  { value: fs.createReadStream(config.FILES[fileKey]), filename: `${fileKey}.pdf` },
+        source:  { value: fs.createReadStream(config.FILES[fileKey]), filename: filenames[fileKey] },
       });
+      const ownerId = doc.owner_id ?? doc.ownerId;
       await vk.api.messages.send({
         peer_id:    Number(chatId),
-        attachment: `doc${doc.owner_id}_${doc.id}`,
+        message:    ' ',
+        attachment: `doc${ownerId}_${doc.id}`,
         random_id:  Math.random() * 1e9 | 0,
       });
     }
@@ -96,7 +123,7 @@ async function handleAdminMessage(text) {
     await vk.api.messages.send({
       user_id:    config.ADMIN_VK_ID,
       message:    result.text,
-      attachment: `doc${doc.owner_id}_${doc.id}`,
+      attachment: `doc${doc.owner_id ?? doc.ownerId}_${doc.id}`,
       random_id:  Math.random() * 1e9 | 0,
     });
     return;

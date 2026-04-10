@@ -1,9 +1,11 @@
 const store = require('./store');
 const messages = require('./messages');
+const config = require('../config');
 
 function handleAction({ platform, chatId, action, text }) {
   const user = store.getUser(platform, chatId);
   const state = user ? user.state : null;
+  const b = config.BANNERS;
 
   // COMPLETED — ничего нового не происходит, включая /start
   if (state === 'COMPLETED') {
@@ -14,7 +16,7 @@ function handleAction({ platform, chatId, action, text }) {
   if (action === 'START') {
     store.upsertUser(platform, chatId, 'MSG1_SENT');
     return {
-      messages: [{ text: messages.MSG_1, button: { label: messages.BTN_MSG1, callback: 'next_1' } }],
+      messages: [{ text: messages.MSG_1, button: { label: messages.BTN_MSG1, callback: 'next_1' }, banner: b.msg1 }],
       files: [],
       newState: 'MSG1_SENT',
     };
@@ -24,7 +26,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state !== 'MSG1_SENT') return { messages: [], files: [], newState: null };
     store.upsertUser(platform, chatId, 'MSG2_SENT');
     return {
-      messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' } }],
+      messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' }, banner: b.msg2 }],
       files: [],
       newState: 'MSG2_SENT',
     };
@@ -34,7 +36,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state !== 'MSG2_SENT') return { messages: [], files: [], newState: null };
     store.upsertUser(platform, chatId, 'AWAIT_PAYMENT');
     return {
-      messages: [{ text: messages.MSG_3 }],
+      messages: [{ text: messages.MSG_3, banner: b.msg3 }],
       files: [],
       newState: 'AWAIT_PAYMENT',
     };
@@ -44,7 +46,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state === 'MSG1_SENT') {
       store.upsertUser(platform, chatId, 'MSG2_SENT');
       return {
-        messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' } }],
+        messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' }, banner: b.msg2 }],
         files: [],
         newState: 'MSG2_SENT',
       };
@@ -52,7 +54,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state === 'MSG2_SENT') {
       store.upsertUser(platform, chatId, 'AWAIT_PAYMENT');
       return {
-        messages: [{ text: messages.MSG_3 }],
+        messages: [{ text: messages.MSG_3, banner: b.msg3 }],
         files: [],
         newState: 'AWAIT_PAYMENT',
       };
@@ -66,12 +68,11 @@ function handleAction({ platform, chatId, action, text }) {
       if (normalized === 'ГОТОВО') {
         store.upsertUser(platform, chatId, 'COMPLETED');
         return {
-          messages: [{ text: messages.MSG_4 }],
-          files: ['guide', 'tracker', 'wallpaper'],
+          messages: [{ text: messages.MSG_4, banner: b.msg4 }],
+          files: ['combined', 'guide', 'tracker', 'wallpapers'],
           newState: 'COMPLETED',
         };
       }
-      // Написал что-то вместо ГОТОВО — уведомить менеджера
       return {
         messages: [{ text: messages.FALLBACK_PAYMENT[platform] }],
         files: [],
@@ -101,7 +102,6 @@ function handleAction({ platform, chatId, action, text }) {
       };
     }
 
-    // state === null — пользователь пишет без /start
     return {
       messages: [{ text: messages.FALLBACK_IDLE[platform] }],
       files: [],
