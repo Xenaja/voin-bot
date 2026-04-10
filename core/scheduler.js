@@ -3,9 +3,9 @@ const flow = require('./flow');
 const messages = require('./messages');
 
 function startScheduler(adapters) {
-  // Авто-продвижение — каждые 5 минут
+  // Авто-продвижение — только Telegram (VK делает это сам через setTimeout в адаптере)
   setInterval(async () => {
-    for (const platform of ['telegram', 'vk']) {
+    for (const platform of ['telegram']) {
       if (!adapters[platform]) continue;
       const users = store.getPendingAutoProgress(platform);
       for (const user of users) {

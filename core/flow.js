@@ -6,6 +6,7 @@ function handleAction({ platform, chatId, action, text }) {
   const user = store.getUser(platform, chatId);
   const state = user ? user.state : null;
   const b = config.BANNERS;
+  const tg = platform === 'telegram';
 
   // COMPLETED — ничего нового не происходит, включая /start
   if (state === 'COMPLETED') {
@@ -16,7 +17,7 @@ function handleAction({ platform, chatId, action, text }) {
   if (action === 'START') {
     store.upsertUser(platform, chatId, 'MSG1_SENT');
     return {
-      messages: [{ text: messages.MSG_1, button: { label: messages.BTN_MSG1, callback: 'next_1' }, banner: b.msg1 }],
+      messages: [{ text: messages.MSG_1, banner: b.msg1, ...(tg && { button: { label: messages.BTN_MSG1, callback: 'next_1' } }) }],
       files: [],
       newState: 'MSG1_SENT',
     };
@@ -26,7 +27,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state !== 'MSG1_SENT') return { messages: [], files: [], newState: null };
     store.upsertUser(platform, chatId, 'MSG2_SENT');
     return {
-      messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' }, banner: b.msg2 }],
+      messages: [{ text: messages.MSG_2, banner: b.msg2, ...(tg && { button: { label: messages.BTN_MSG2, callback: 'next_2' } }) }],
       files: [],
       newState: 'MSG2_SENT',
     };
@@ -46,7 +47,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state === 'MSG1_SENT') {
       store.upsertUser(platform, chatId, 'MSG2_SENT');
       return {
-        messages: [{ text: messages.MSG_2, button: { label: messages.BTN_MSG2, callback: 'next_2' }, banner: b.msg2 }],
+        messages: [{ text: messages.MSG_2, banner: b.msg2, ...(tg && { button: { label: messages.BTN_MSG2, callback: 'next_2' } }) }],
         files: [],
         newState: 'MSG2_SENT',
       };
@@ -70,6 +71,7 @@ function handleAction({ platform, chatId, action, text }) {
         return {
           messages: [{ text: messages.MSG_4, banner: b.msg4 }],
           files: ['combined', 'guide', 'tracker', 'wallpapers'],
+          trailingMessages: [{ text: messages.MSG_FINAL }],
           newState: 'COMPLETED',
         };
       }
@@ -84,7 +86,7 @@ function handleAction({ platform, chatId, action, text }) {
 
     if (state === 'MSG1_SENT') {
       return {
-        messages: [{ text: messages.FALLBACK_MID_FUNNEL, button: { label: messages.BTN_MSG1, callback: 'next_1' } }],
+        messages: [{ text: tg ? messages.FALLBACK_MID_FUNNEL : messages.FALLBACK_WAIT, ...(tg && { button: { label: messages.BTN_MSG1, callback: 'next_1' } }) }],
         files: [],
         newState: null,
         notifyManager: true,
@@ -94,7 +96,7 @@ function handleAction({ platform, chatId, action, text }) {
 
     if (state === 'MSG2_SENT') {
       return {
-        messages: [{ text: messages.FALLBACK_MID_FUNNEL, button: { label: messages.BTN_MSG2, callback: 'next_2' } }],
+        messages: [{ text: tg ? messages.FALLBACK_MID_FUNNEL : messages.FALLBACK_WAIT, ...(tg && { button: { label: messages.BTN_MSG2, callback: 'next_2' } }) }],
         files: [],
         newState: null,
         notifyManager: true,

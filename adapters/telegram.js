@@ -28,6 +28,9 @@ async function send(chatId, result) {
       await bot.telegram.sendDocument(chatId, { source: config.FILES[fileKey] });
     }
   }
+  for (const msg of result.trailingMessages || []) {
+    await bot.telegram.sendMessage(chatId, msg.text, { link_preview_options: { is_disabled: true } });
+  }
 }
 
 async function sendText(chatId, text) {

@@ -73,6 +73,13 @@ async function send(chatId, result) {
       });
     }
   }
+  for (const msg of result.trailingMessages || []) {
+    await vk.api.messages.send({
+      peer_id:   Number(chatId),
+      message:   msg.text,
+      random_id: Math.random() * 1e9 | 0,
+    });
+  }
 }
 
 async function sendText(chatId, text) {
@@ -136,6 +143,21 @@ async function handleAdminMessage(text) {
   });
 }
 
+function scheduleAutoProgress(chatId, newState) {
+  if (newState !== 'MSG1_SENT' && newState !== 'MSG2_SENT') return;
+  setTimeout(async () => {
+    try {
+      const result = flow.handleAction({ platform: 'vk', chatId, action: 'AUTO_PROGRESS' });
+      if (result.messages.length > 0) {
+        await send(chatId, result);
+        scheduleAutoProgress(chatId, result.newState);
+      }
+    } catch (err) {
+      console.error('[vk] auto-progress error:', err.message);
+    }
+  }, 30 * 1000);
+}
+
 async function handleMessage(msg) {
   const chatId = String(msg.peer_id);
   const fromId = msg.from_id;
@@ -161,7 +183,10 @@ async function handleMessage(msg) {
 
     const lower = text.toLowerCase();
     if (TRIGGER_WORDS.some(w => lower.includes(w))) {
-      return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'START' }));
+      const result = flow.handleAction({ platform: 'vk', chatId, action: 'START' });
+      await send(chatId, result);
+      scheduleAutoProgress(chatId, result.newState);
+      return;
     }
 
     const result = flow.handleAction({ platform: 'vk', chatId, action: 'TEXT', text });
