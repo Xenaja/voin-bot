@@ -10,6 +10,9 @@ const store = require('../core/store');
 
 let bot;
 
+// Ожидающие ответа: managerId → { platform, chatId }
+const pendingReplies = new Map();
+
 const FILE_ID_CACHE_PATH = './data/tg_file_ids.json';
 
 function loadFileIds() {
@@ -90,8 +93,11 @@ async function sendText(chatId, text) {
 async function notifyManager(chatId, platform, text) {
   const platformLabel = platform === 'telegram' ? 'Telegram' : 'VK';
   const msg = `💬 Сообщение вне сценария\n[${platformLabel}] ID: ${chatId}\n\n"${text}"`;
+  const keyboard = Markup.inlineKeyboard([
+    Markup.button.callback('✍️ Ответить', `reply_${platform}_${chatId}`),
+  ]);
   try {
-    await bot.telegram.sendMessage(config.MANAGER_TG_ID, msg);
+    await bot.telegram.sendMessage(config.MANAGER_TG_ID, msg, keyboard);
   } catch (err) {
     console.error('[telegram] notifyManager error:', err.message);
   }
@@ -271,11 +277,46 @@ function start() {
     }
   });
 
+  // Менеджер нажал кнопку "Ответить" под уведомлением
+  bot.action(/^reply_(.+)_(\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const platform = ctx.match[1];
+    const targetChatId = ctx.match[2];
+    const managerId = ctx.from.id;
+    pendingReplies.set(managerId, { platform, chatId: targetChatId });
+    const label = platform === 'telegram' ? 'Telegram' : 'VK';
+    await ctx.reply(`✍️ Напишите ответ для [${label}] ${targetChatId}:`);
+  });
+
   bot.on('text', async (ctx) => {
     try {
       const fromId = ctx.message.from.id;
       const text = ctx.message.text;
       const chatId = String(ctx.chat.id);
+
+      // Менеджер ввёл текст ответа после нажатия кнопки "Ответить"
+      if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId) && pendingReplies.has(fromId)) {
+        const { platform: targetPlatform, chatId: targetChatId } = pendingReplies.get(fromId);
+        pendingReplies.delete(fromId);
+        try {
+          if (targetPlatform === 'telegram') {
+            await sendText(targetChatId, text);
+          } else if (targetPlatform === 'vk') {
+            const vkAdapter = global.adapters && global.adapters.vk;
+            if (vkAdapter && vkAdapter.sendText) {
+              await vkAdapter.sendText(targetChatId, text);
+            } else {
+              await ctx.reply('❌ VK адаптер недоступен');
+              return;
+            }
+          }
+          const label = targetPlatform === 'telegram' ? 'Telegram' : 'VK';
+          await ctx.reply(`✅ Отправлено [${label}] ${targetChatId}`);
+        } catch (err) {
+          await ctx.reply(`❌ Ошибка: ${err.message}`);
+        }
+        return;
+      }
 
       // Менеджер отвечает на уведомление → пересылаем юзеру
       if (
