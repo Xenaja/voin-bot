@@ -145,16 +145,10 @@ async function handleAdminMessage(text, adminId) {
   }
 
   if (result.file) {
-    const buf = Buffer.from(result.file.content, 'utf-8');
-    const doc = await vk.upload.messageDocument({
-      peer_id: adminId,
-      source:  { value: buf, filename: result.file.filename, contentType: 'text/csv' },
-    });
     await vk.api.messages.send({
-      user_id:    adminId,
-      message:    result.text,
-      attachment: `doc${doc.owner_id ?? doc.ownerId}_${doc.id}`,
-      random_id:  Math.random() * 1e9 | 0,
+      user_id:   adminId,
+      message:   result.text + '\n\n' + result.file.content,
+      random_id: Math.random() * 1e9 | 0,
     });
     return;
   }
@@ -270,7 +264,7 @@ async function startLongPoll() {
 
 async function preloadFiles() {
   const filenames = { combined: 'Гайд+Трекер.pdf', guide: 'Гайд.pdf', tracker: 'Трекер.pdf' };
-  const PRELOAD_PEER = config.ADMIN_VK_ID;
+  const PRELOAD_PEER = config.ADMIN_VK_IDS[0];
 
   for (const fileKey of ['combined', 'guide', 'tracker']) {
     if (vkFileIdCache[fileKey]) { console.log(`[vk] cache hit: ${fileKey}`); continue; }
