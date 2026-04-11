@@ -11,8 +11,8 @@ module.exports = {
   // Менеджер получает уведомления о сообщениях вне сценария
   MANAGER_VK_ID: 1104677909,
   MANAGER_TG_ID: 718850812,
-  // Админ — команды /stats, /export, /broadcast и др.
-  ADMIN_VK_ID: 103652699,
+  // Админы — команды /stats, /export, /broadcast и др.
+  ADMIN_VK_IDS: [103652699, 261076],
 
   FILES: {
     combined:  './Gaid+tracker/Gaid-tracker-KodVoina.pdf',

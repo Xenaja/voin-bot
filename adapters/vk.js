@@ -129,7 +129,7 @@ async function notifyManager(chatId, platform, text) {
   }
 }
 
-async function handleAdminMessage(text) {
+async function handleAdminMessage(text, adminId) {
   const result = handleAdminCommand(text);
 
   if (result.broadcast && result.broadcast.length > 0) {
@@ -138,7 +138,6 @@ async function handleAdminMessage(text) {
         if (item.platform === 'vk') {
           await sendText(item.chatId, item.text);
         }
-        // Telegram broadcast — через telegram adapter (пока только VK)
       } catch (err) {
         console.error('[vk] broadcast error:', err.message);
       }
@@ -146,14 +145,13 @@ async function handleAdminMessage(text) {
   }
 
   if (result.file) {
-    // Отправляем CSV как документ
     const buf = Buffer.from(result.file.content, 'utf-8');
     const doc = await vk.upload.messageDocument({
-      peer_id: config.ADMIN_VK_ID,
+      peer_id: adminId,
       source:  { value: buf, filename: result.file.filename, contentType: 'text/csv' },
     });
     await vk.api.messages.send({
-      user_id:    config.ADMIN_VK_ID,
+      user_id:    adminId,
       message:    result.text,
       attachment: `doc${doc.owner_id ?? doc.ownerId}_${doc.id}`,
       random_id:  Math.random() * 1e9 | 0,
@@ -162,7 +160,7 @@ async function handleAdminMessage(text) {
   }
 
   await vk.api.messages.send({
-    user_id:   config.ADMIN_VK_ID,
+    user_id:   adminId,
     message:   result.text,
     random_id: Math.random() * 1e9 | 0,
   });
@@ -193,8 +191,8 @@ async function handleMessage(msg) {
   console.log('[vk] message:', { chatId, fromId, text, payload });
 
   // Сообщение от админа — обрабатываем команды
-  if (fromId === config.ADMIN_VK_ID && text.startsWith('/')) {
-    try { await handleAdminMessage(text); } catch (err) { console.error('[vk] admin error:', err.message); }
+  if (config.ADMIN_VK_IDS.includes(fromId) && text.startsWith('/')) {
+    try { await handleAdminMessage(text, fromId); } catch (err) { console.error('[vk] admin error:', err.message); }
     return;
   }
 
