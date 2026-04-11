@@ -2,7 +2,7 @@ const store = require('./store');
 
 const STATES_ORDER = ['MSG1_SENT', 'MSG2_SENT', 'AWAIT_PAYMENT', 'COMPLETED'];
 
-function handleAdminCommand(text) {
+function handleAdminCommand(text, platform = null, chatId = null) {
   const [cmd, ...args] = text.trim().split(/\s+/);
 
   switch (cmd.toLowerCase()) {
@@ -63,7 +63,28 @@ function handleAdminCommand(text) {
         `${u.id},${u.platform},${u.chat_id},${u.state},${u.updated_at},${u.reminder_count}`
       );
       const csv = 'id,platform,chat_id,state,updated_at,reminder_count\n' + rows.join('\n');
-      return { text: `📋 База (${users.length} записей):`, file: { content: csv, filename: 'users.csv' } };
+      const filename = `users_export_${Date.now()}.csv`;
+      return { text: `📋 База (${users.length} записей). Отправляю файл:`, file: { content: csv, filename } };
+    }
+
+    case '/test': {
+      if (platform && chatId) {
+        store.setTestMode(platform, chatId, true);
+      }
+      return { 
+        text: `🧪 Режим тестирования переключен. Теперь вы обычный пользователь. Напишите /admin чтобы вернуться в режим админа.`,
+        testMode: true 
+      };
+    }
+
+    case '/admin': {
+      if (platform && chatId) {
+        store.setTestMode(platform, chatId, false);
+      }
+      return { 
+        text: `👑 Режим админа восстановлен. Доступные команды: /stats, /completed, /user, /reset, /broadcast, /export, /test`,
+        adminMode: true 
+      };
     }
 
     default:

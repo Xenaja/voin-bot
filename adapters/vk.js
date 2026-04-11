@@ -3,6 +3,7 @@ const fs = require('fs');
 const config = require('../config');
 const flow = require('../core/flow');
 const { handleAdminCommand } = require('../core/admin');
+const store = require('../core/store');
 
 const TRIGGER_WORDS = ['старт', 'start', 'начать', 'привет', 'хочу'];
 
@@ -108,11 +109,19 @@ async function send(chatId, result) {
 }
 
 async function sendText(chatId, text) {
-  await vk.api.messages.send({
-    peer_id:   Number(chatId),
-    message:   text,
-    random_id: Math.random() * 1e9 | 0,
-  });
+  console.log(`[vk] sendText called: chatId=${chatId}, text="${text.substring(0, 50)}..."`);
+  try {
+    const result = await vk.api.messages.send({
+      peer_id:   Number(chatId),
+      message:   text,
+      random_id: Math.random() * 1e9 | 0,
+    });
+    console.log(`[vk] ✅ sendText success: message_id=${result}`);
+    return result;
+  } catch (err) {
+    console.error(`[vk] ❌ sendText error:`, err.message);
+    throw err;
+  }
 }
 
 async function notifyManager(chatId, platform, text) {
@@ -129,35 +138,134 @@ async function notifyManager(chatId, platform, text) {
   }
 }
 
-async function handleAdminMessage(text, adminId) {
-  const result = handleAdminCommand(text);
+async function uploadDocument(peerId, filePath, filename) {
+  const doc = await vk.upload.messageDocument({
+    peer_id: Number(peerId),
+    source:  { value: fs.createReadStream(filePath) },
+    filename: filename,
+  });
+  const ownerId = doc.owner_id ?? doc.ownerId;
+  return `doc${ownerId}_${doc.id}`;
+}
 
-  if (result.broadcast && result.broadcast.length > 0) {
-    for (const item of result.broadcast) {
+async function handleAdminMessage(text, platform, chatId) {
+  console.log(`[vk] handleAdminMessage called: text="${text}", platform=${platform}, chatId=${chatId}`);
+  
+  // Используем глобальный роутер для кросс-платформенной координации
+  if (global.adminRouter) {
+    const result = await global.adminRouter.handleAdminCommand(text, platform, chatId);
+    
+    console.log(`[vk] admin-router result:`, { 
+      hasBroadcast: !!result.broadcast, 
+      broadcastCount: result.broadcast?.length || 0,
+      text: result.text?.substring(0, 100)
+    });
+
+    // Отправляем ответ админу
+    if (result.file) {
       try {
-        if (item.platform === 'vk') {
-          await sendText(item.chatId, item.text);
+        // Создаём временный файл и отправляем как документ
+        const fs = require('fs');
+        const path = require('path');
+        const tempDir = path.join(__dirname, '../data/temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
         }
+        const filePath = path.join(tempDir, result.file.filename);
+        fs.writeFileSync(filePath, result.file.content, 'utf-8');
+        
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text,
+          random_id: Math.random() * 1e9 | 0,
+          attachment: await uploadDocument(chatId, filePath, result.file.filename),
+        });
+        
+        // Удаляем временный файл
+        fs.unlinkSync(filePath);
       } catch (err) {
-        console.error('[vk] broadcast error:', err.message);
+        console.error('[vk] send file error:', err.message);
+        // Fallback: отправляем как текст
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text + '\n\n' + result.file.content,
+          random_id: Math.random() * 1e9 | 0,
+        });
+      }
+      return;
+    }
+
+    if (result.text) {
+      try {
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text,
+          random_id: Math.random() * 1e9 | 0,
+        });
+      } catch (err) {
+        console.error('[vk] send response error:', err.message);
+      }
+    }
+  } else {
+    // Fallback: используем локальный обработчик
+    const result = handleAdminCommand(text, platform, chatId);
+
+    if (result.broadcast && result.broadcast.length > 0) {
+      for (const item of result.broadcast) {
+        try {
+          if (item.platform === 'vk') {
+            await sendText(item.chatId, item.text);
+          } else if (item.platform === 'telegram') {
+            console.log(`[vk] broadcast skipped for telegram user ${item.chatId} (handled by telegram adapter)`);
+          }
+        } catch (err) {
+          console.error('[vk] broadcast error:', err.message);
+        }
+      }
+    }
+
+    if (result.file) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const tempDir = path.join(__dirname, '../data/temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        const filePath = path.join(tempDir, result.file.filename);
+        fs.writeFileSync(filePath, result.file.content, 'utf-8');
+
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text,
+          random_id: Math.random() * 1e9 | 0,
+          attachment: await uploadDocument(chatId, filePath, result.file.filename),
+        });
+
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('[vk] send file error:', err.message);
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text + '\n\n' + result.file.content,
+          random_id: Math.random() * 1e9 | 0,
+        });
+      }
+      return;
+    }
+
+    if (result.text) {
+      try {
+        await vk.api.messages.send({
+          user_id:   chatId,
+          message:   result.text,
+          random_id: Math.random() * 1e9 | 0,
+        });
+      } catch (err) {
+        console.error('[vk] send response error:', err.message);
       }
     }
   }
-
-  if (result.file) {
-    await vk.api.messages.send({
-      user_id:   adminId,
-      message:   result.text + '\n\n' + result.file.content,
-      random_id: Math.random() * 1e9 | 0,
-    });
-    return;
-  }
-
-  await vk.api.messages.send({
-    user_id:   adminId,
-    message:   result.text,
-    random_id: Math.random() * 1e9 | 0,
-  });
 }
 
 function scheduleAutoProgress(chatId, newState) {
@@ -184,13 +292,33 @@ async function handleMessage(msg) {
 
   console.log('[vk] message:', { chatId, fromId, text, payload });
 
-  // Сообщение от админа — обрабатываем команды
-  if (config.ADMIN_VK_IDS.includes(fromId) && text.startsWith('/')) {
-    try { await handleAdminMessage(text, fromId); } catch (err) { console.error('[vk] admin error:', err.message); }
-    return;
+  // Проверяем, является ли отправитель админом
+  if (config.ADMIN_VK_IDS.includes(fromId)) {
+    // Проверяем режим тестирования
+    const testMode = store.isInTestMode('vk', chatId);
+    
+    // Если НЕ в режиме тестирования - обрабатываем только команды
+    if (!testMode) {
+      if (text.startsWith('/')) {
+        try { await handleAdminMessage(text, 'vk', chatId); } 
+        catch (err) { console.error('[vk] admin error:', err.message); }
+      } else {
+        console.log(`[vk] non-command from admin ${fromId} (not in test mode), ignoring`);
+      }
+      return;
+    }
+    
+    // В режиме тестирования: команды всё ещё работают
+    if (text.startsWith('/')) {
+      try { await handleAdminMessage(text, 'vk', chatId); } 
+      catch (err) { console.error('[vk] admin error:', err.message); }
+      return;
+    }
+    // Иначе продолжаем обработку как обычный пользователь
   }
 
   try {
+    // Проверяем payload нажатых кнопок
     if (payload?.action === 'next_1') {
       return await send(chatId, flow.handleAction({ platform: 'vk', chatId, action: 'BTN_NEXT_1' }));
     }

@@ -15,6 +15,17 @@ db.exec(`
   )
 `);
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS admin_settings (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform       TEXT NOT NULL,
+    chat_id        TEXT NOT NULL,
+    test_mode      INTEGER DEFAULT 0,
+    updated_at     TEXT DEFAULT (datetime('now')),
+    UNIQUE(platform, chat_id)
+  )
+`);
+
 function getUser(platform, chatId) {
   const stmt = db.prepare('SELECT * FROM users WHERE platform = ? AND chat_id = ?');
   return stmt.get(platform, String(chatId)) || null;
@@ -61,10 +72,32 @@ function incrementReminderCount(platform, chatId) {
   `).run(platform, String(chatId));
 }
 
+function isInTestMode(platform, chatId) {
+  const stmt = db.prepare('SELECT test_mode FROM admin_settings WHERE platform = ? AND chat_id = ?');
+  const row = stmt.get(platform, String(chatId));
+  return row ? row.test_mode === 1 : false;
+}
+
+function setTestMode(platform, chatId, enabled) {
+  db.prepare(`
+    INSERT INTO admin_settings (platform, chat_id, test_mode, updated_at)
+    VALUES (?, ?, ?, datetime('now'))
+    ON CONFLICT(platform, chat_id) DO UPDATE SET
+      test_mode  = excluded.test_mode,
+      updated_at = datetime('now')
+  `).run(platform, String(chatId), enabled ? 1 : 0);
+}
+
+function getAllAdminSettings() {
+  return db.prepare('SELECT * FROM admin_settings').all();
+}
+
 module.exports = {
   getUser,
   upsertUser,
   getPendingAutoProgress,
   getPendingReminders,
   incrementReminderCount,
+  isInTestMode,
+  setTestMode,
 };

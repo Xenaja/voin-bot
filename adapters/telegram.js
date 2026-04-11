@@ -2,6 +2,8 @@ const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 const config = require('../config');
 const flow = require('../core/flow');
+const { handleAdminCommand } = require('../core/admin');
+const store = require('../core/store');
 
 let bot;
 
@@ -60,7 +62,15 @@ async function send(chatId, result) {
 }
 
 async function sendText(chatId, text) {
-  await bot.telegram.sendMessage(chatId, text);
+  console.log(`[telegram] sendText called: chatId=${chatId}, text="${text.substring(0, 50)}..."`);
+  try {
+    const result = await bot.telegram.sendMessage(chatId, text);
+    console.log(`[telegram] ✅ sendText success: message_id=${result.message_id}`);
+    return result;
+  } catch (err) {
+    console.error(`[telegram] ❌ sendText error:`, err.message);
+    throw err;
+  }
 }
 
 async function notifyManager(chatId, platform, text) {
@@ -73,17 +83,123 @@ async function notifyManager(chatId, platform, text) {
   }
 }
 
+async function handleAdminMessage(text, platform, chatId) {
+  console.log(`[telegram] handleAdminMessage called: text="${text}", platform=${platform}, chatId=${chatId}`);
+  
+  // Используем глобальный роутер для кросс-платформенной координации
+  if (global.adminRouter) {
+    const result = await global.adminRouter.handleAdminCommand(text, platform, chatId);
+    
+    console.log(`[telegram] admin-router result:`, { 
+      hasBroadcast: !!result.broadcast, 
+      broadcastCount: result.broadcast?.length || 0,
+      text: result.text?.substring(0, 100)
+    });
+
+    // Отправляем ответ админу
+    if (result.file) {
+      try {
+        // Создаём временный файл и отправляем как документ
+        const fs = require('fs');
+        const path = require('path');
+        const tempDir = path.join(__dirname, '../data/temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        const filePath = path.join(tempDir, result.file.filename);
+        fs.writeFileSync(filePath, result.file.content, 'utf-8');
+        
+        await bot.telegram.sendDocument(chatId, { source: filePath }, { caption: result.text });
+
+        // Удаляем временный файл
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('[telegram] send file error:', err.message);
+        // Fallback: отправляем как текст
+        await bot.telegram.sendMessage(chatId, result.text + '\n\n' + result.file.content);
+      }
+      return;
+    }
+
+    if (result.text) {
+      try {
+        await bot.telegram.sendMessage(chatId, result.text);
+      } catch (err) {
+        console.error('[telegram] send response error:', err.message);
+      }
+    }
+  } else {
+    // Fallback: используем локальный обработчик
+    const result = handleAdminCommand(text, platform, chatId);
+
+    if (result.broadcast && result.broadcast.length > 0) {
+      for (const item of result.broadcast) {
+        try {
+          if (item.platform === 'telegram') {
+            await sendText(item.chatId, item.text);
+          } else if (item.platform === 'vk') {
+            console.log(`[telegram] broadcast skipped for vk user ${item.chatId} (handled by vk adapter)`);
+          }
+        } catch (err) {
+          console.error('[telegram] broadcast error:', err.message);
+        }
+      }
+    }
+
+    if (result.file) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const tempDir = path.join(__dirname, '../data/temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+        const filePath = path.join(tempDir, result.file.filename);
+        fs.writeFileSync(filePath, result.file.content, 'utf-8');
+
+        await bot.telegram.sendDocument(chatId, { source: filePath }, { caption: result.text });
+
+        fs.unlinkSync(filePath);
+      } catch (err) {
+        console.error('[telegram] send file error:', err.message);
+        await bot.telegram.sendMessage(chatId, result.text + '\n\n' + result.file.content);
+      }
+      return;
+    }
+
+    if (result.text) {
+      try {
+        await bot.telegram.sendMessage(chatId, result.text);
+      } catch (err) {
+        console.error('[telegram] send response error:', err.message);
+      }
+    }
+  }
+}
+
 function start() {
   bot = new Telegraf(config.TELEGRAM_TOKEN);
 
   bot.start(async (ctx) => {
     try {
+      const fromId = ctx.message.from.id;
+      const chatId = String(ctx.chat.id);
+      
+      // Если это админ, проверяем режим тестирования
+      if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId)) {
+        const testMode = store.isInTestMode('telegram', chatId);
+        if (!testMode) {
+          console.log(`[telegram] admin ${fromId} sent /start - ignoring (not in test mode)`);
+          return;
+        }
+      }
+      
       const result = flow.handleAction({
         platform: 'telegram',
-        chatId: String(ctx.chat.id),
+        chatId: chatId,
         action: 'START',
       });
-      await send(String(ctx.chat.id), result);
+      await send(chatId, result);
     } catch (err) {
       console.error('[telegram] start error:', err.message);
     }
@@ -92,12 +208,24 @@ function start() {
   bot.action('next_1', async (ctx) => {
     await ctx.answerCbQuery();
     try {
+      const fromId = ctx.from.id;
+      const chatId = String(ctx.chat.id);
+      
+      // Если это админ, проверяем режим тестирования
+      if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId)) {
+        const testMode = store.isInTestMode('telegram', chatId);
+        if (!testMode) {
+          console.log(`[telegram] admin ${fromId} clicked next_1 - ignoring (not in test mode)`);
+          return;
+        }
+      }
+      
       const result = flow.handleAction({
         platform: 'telegram',
-        chatId: String(ctx.chat.id),
+        chatId: chatId,
         action: 'BTN_NEXT_1',
       });
-      await send(String(ctx.chat.id), result);
+      await send(chatId, result);
     } catch (err) {
       console.error('[telegram] next_1 error:', err.message);
     }
@@ -106,12 +234,24 @@ function start() {
   bot.action('next_2', async (ctx) => {
     await ctx.answerCbQuery();
     try {
+      const fromId = ctx.from.id;
+      const chatId = String(ctx.chat.id);
+      
+      // Если это админ, проверяем режим тестирования
+      if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId)) {
+        const testMode = store.isInTestMode('telegram', chatId);
+        if (!testMode) {
+          console.log(`[telegram] admin ${fromId} clicked next_2 - ignoring (not in test mode)`);
+          return;
+        }
+      }
+      
       const result = flow.handleAction({
         platform: 'telegram',
-        chatId: String(ctx.chat.id),
+        chatId: chatId,
         action: 'BTN_NEXT_2',
       });
-      await send(String(ctx.chat.id), result);
+      await send(chatId, result);
     } catch (err) {
       console.error('[telegram] next_2 error:', err.message);
     }
@@ -119,16 +259,43 @@ function start() {
 
   bot.on('text', async (ctx) => {
     try {
+      const fromId = ctx.message.from.id;
+      const text = ctx.message.text;
+      const chatId = String(ctx.chat.id);
+
+      // Проверяем, является ли отправитель админом
+      if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId)) {
+        // Проверяем режим тестирования
+        const testMode = store.isInTestMode('telegram', chatId);
+        
+        // Если НЕ в режиме тестирования - обрабатываем только команды
+        if (!testMode) {
+          if (text.startsWith('/')) {
+            await handleAdminMessage(text, 'telegram', chatId);
+          } else {
+            console.log(`[telegram] non-command from admin ${fromId} (not in test mode), ignoring`);
+          }
+          return;
+        }
+        
+        // В режиме тестирования: команды /admin и /test всё ещё работают
+        if (text.startsWith('/')) {
+          await handleAdminMessage(text, 'telegram', chatId);
+          return;
+        }
+        // Иначе продолжаем обработку как обычный пользователь
+      }
+
       const result = flow.handleAction({
         platform: 'telegram',
-        chatId: String(ctx.chat.id),
+        chatId: chatId,
         action: 'TEXT',
         text: ctx.message.text,
       });
-      await send(String(ctx.chat.id), result);
+      await send(chatId, result);
 
       if (result.notifyManager && result.originalText) {
-        await notifyManager(String(ctx.chat.id), 'telegram', result.originalText);
+        await notifyManager(chatId, 'telegram', result.originalText);
       }
     } catch (err) {
       console.error('[telegram] text error:', err.message);
