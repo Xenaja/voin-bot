@@ -52,14 +52,18 @@ function getPendingAutoProgress(platform) {
 }
 
 function getPendingReminders(platform) {
+  // Не отправляем ночью: 22:00–09:00 по Москве (UTC+3)
+  const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
+  if (moscowHour >= 22 || moscowHour < 9) return [];
+
   return db.prepare(`
     SELECT * FROM users
     WHERE state = 'AWAIT_PAYMENT'
       AND platform = ?
       AND (
-        (reminder_count = 0 AND updated_at < datetime('now', '-24 hours'))
+        (reminder_count = 0 AND updated_at < datetime('now', '-1 hours'))
         OR
-        (reminder_count = 1 AND updated_at < datetime('now', '-48 hours'))
+        (reminder_count = 1 AND updated_at < datetime('now', '-4 hours'))
       )
   `).all(platform);
 }
