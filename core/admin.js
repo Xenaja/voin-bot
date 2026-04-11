@@ -10,15 +10,23 @@ function handleAdminCommand(text, platform = null, chatId = null) {
     case '/stats': {
       const all = getAllUsers();
       const byState = {};
-      const byPlatform = { telegram: 0, vk: 0 };
+      const tg = {}, vk = {};
       for (const u of all) {
         byState[u.state] = (byState[u.state] || 0) + 1;
-        byPlatform[u.platform] = (byPlatform[u.platform] || 0) + 1;
+        if (u.platform === 'telegram') tg[u.state] = (tg[u.state] || 0) + 1;
+        if (u.platform === 'vk') vk[u.state] = (vk[u.state] || 0) + 1;
       }
-      let text = `📊 Статистика:\n\nВсего: ${all.length}\nTelegram: ${byPlatform.telegram}\nVK: ${byPlatform.vk}\n\n`;
-      for (const s of STATES_ORDER) {
-        text += `${s}: ${byState[s] || 0}\n`;
-      }
+      const tgTotal = Object.values(tg).reduce((a, b) => a + b, 0);
+      const vkTotal = Object.values(vk).reduce((a, b) => a + b, 0);
+      const pct = (n, total) => total ? Math.round(n / total * 100) + '%' : '—';
+
+      let text = `📊 Статистика:\n\nВсего: ${all.length}\n\n`;
+      text += `Telegram (${tgTotal}):\n`;
+      for (const s of STATES_ORDER) text += `  ${s}: ${tg[s] || 0}\n`;
+      text += `  Конверсия: ${pct(tg['COMPLETED'] || 0, tgTotal)}\n\n`;
+      text += `VK (${vkTotal}):\n`;
+      for (const s of STATES_ORDER) text += `  ${s}: ${vk[s] || 0}\n`;
+      text += `  Конверсия: ${pct(vk['COMPLETED'] || 0, vkTotal)}\n`;
       return { text };
     }
 
