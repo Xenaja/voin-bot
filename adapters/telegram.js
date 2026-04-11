@@ -26,7 +26,14 @@ async function send(chatId, result) {
   for (const msg of result.messages) {
     if (msg.banner) {
       try {
-        await bot.telegram.sendPhoto(chatId, { source: msg.banner });
+        const bannerKey = 'banner_' + msg.banner.replace(/[^a-z0-9]/gi, '_');
+        if (fileIdCache[bannerKey]) {
+          await bot.telegram.sendPhoto(chatId, fileIdCache[bannerKey]);
+        } else {
+          const sent = await bot.telegram.sendPhoto(chatId, { source: msg.banner });
+          fileIdCache[bannerKey] = sent.photo[sent.photo.length - 1].file_id;
+          saveFileIds(fileIdCache);
+        }
       } catch (err) {
         console.error(`[telegram] banner send failed (continuing): ${err.message}`);
       }
