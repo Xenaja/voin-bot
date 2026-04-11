@@ -6,6 +6,18 @@ const { handleAdminCommand } = require('../core/admin');
 
 const TRIGGER_WORDS = ['старт', 'start', 'начать', 'привет', 'хочу'];
 
+const VK_FILE_ID_CACHE_PATH = './data/vk_file_ids.json';
+
+function loadVkFileIds() {
+  try { return JSON.parse(fs.readFileSync(VK_FILE_ID_CACHE_PATH, 'utf-8')); } catch { return {}; }
+}
+
+function saveVkFileIds(cache) {
+  fs.writeFileSync(VK_FILE_ID_CACHE_PATH, JSON.stringify(cache, null, 2));
+}
+
+let vkFileIdCache = loadVkFileIds();
+
 let vk;
 
 async function send(chatId, result) {
@@ -46,29 +58,42 @@ async function send(chatId, result) {
 
   for (const fileKey of result.files) {
     if (fileKey === 'wallpapers') {
-      for (const photoPath of config.FILES.wallpapers) {
-        const photo = await vk.upload.messagePhoto({
-          peer_id: Number(chatId),
-          source:  { value: fs.createReadStream(photoPath) },
-        });
-        const ownerId = photo.owner_id ?? photo.ownerId;
+      if (!vkFileIdCache.wallpapers) vkFileIdCache.wallpapers = [];
+      for (let i = 0; i < config.FILES.wallpapers.length; i++) {
+        let attachment = vkFileIdCache.wallpapers[i];
+        if (!attachment) {
+          const photo = await vk.upload.messagePhoto({
+            peer_id: Number(chatId),
+            source:  { value: fs.createReadStream(config.FILES.wallpapers[i]) },
+          });
+          const ownerId = photo.owner_id ?? photo.ownerId;
+          attachment = `photo${ownerId}_${photo.id}`;
+          vkFileIdCache.wallpapers[i] = attachment;
+          saveVkFileIds(vkFileIdCache);
+        }
         await vk.api.messages.send({
           peer_id:    Number(chatId),
           message:    ' ',
-          attachment: `photo${ownerId}_${photo.id}`,
+          attachment,
           random_id:  Math.random() * 1e9 | 0,
         });
       }
     } else {
-      const doc = await vk.upload.messageDocument({
-        peer_id: Number(chatId),
-        source:  { value: fs.createReadStream(config.FILES[fileKey]), filename: filenames[fileKey] },
-      });
-      const ownerId = doc.owner_id ?? doc.ownerId;
+      let attachment = vkFileIdCache[fileKey];
+      if (!attachment) {
+        const doc = await vk.upload.messageDocument({
+          peer_id: Number(chatId),
+          source:  { value: fs.createReadStream(config.FILES[fileKey]), filename: filenames[fileKey] },
+        });
+        const ownerId = doc.owner_id ?? doc.ownerId;
+        attachment = `doc${ownerId}_${doc.id}`;
+        vkFileIdCache[fileKey] = attachment;
+        saveVkFileIds(vkFileIdCache);
+      }
       await vk.api.messages.send({
         peer_id:    Number(chatId),
         message:    ' ',
-        attachment: `doc${ownerId}_${doc.id}`,
+        attachment,
         random_id:  Math.random() * 1e9 | 0,
       });
     }
