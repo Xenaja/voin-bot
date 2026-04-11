@@ -1,8 +1,21 @@
 const { Telegraf, Markup } = require('telegraf');
+const fs = require('fs');
 const config = require('../config');
 const flow = require('../core/flow');
 
 let bot;
+
+const FILE_ID_CACHE_PATH = './data/tg_file_ids.json';
+
+function loadFileIds() {
+  try { return JSON.parse(fs.readFileSync(FILE_ID_CACHE_PATH, 'utf-8')); } catch { return {}; }
+}
+
+function saveFileIds(cache) {
+  fs.writeFileSync(FILE_ID_CACHE_PATH, JSON.stringify(cache, null, 2));
+}
+
+let fileIdCache = loadFileIds();
 
 async function send(chatId, result) {
   for (const msg of result.messages) {
@@ -20,12 +33,25 @@ async function send(chatId, result) {
   }
   for (const fileKey of result.files) {
     if (fileKey === 'wallpapers') {
-      await bot.telegram.sendMediaGroup(chatId, config.FILES.wallpapers.map(p => ({
-        type: 'photo',
-        media: { source: p },
-      })));
+      if (fileIdCache.wallpapers) {
+        await bot.telegram.sendMediaGroup(chatId, fileIdCache.wallpapers.map(id => ({
+          type: 'photo', media: id,
+        })));
+      } else {
+        const sent = await bot.telegram.sendMediaGroup(chatId, config.FILES.wallpapers.map(p => ({
+          type: 'photo', media: { source: p },
+        })));
+        fileIdCache.wallpapers = sent.map(m => m.photo[m.photo.length - 1].file_id);
+        saveFileIds(fileIdCache);
+      }
     } else {
-      await bot.telegram.sendDocument(chatId, { source: config.FILES[fileKey] });
+      if (fileIdCache[fileKey]) {
+        await bot.telegram.sendDocument(chatId, fileIdCache[fileKey]);
+      } else {
+        const sent = await bot.telegram.sendDocument(chatId, { source: config.FILES[fileKey] });
+        fileIdCache[fileKey] = sent.document.file_id;
+        saveFileIds(fileIdCache);
+      }
     }
   }
   for (const msg of result.trailingMessages || []) {
