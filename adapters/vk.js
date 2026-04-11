@@ -310,10 +310,21 @@ async function preloadFiles() {
   }
 }
 
+async function preloadWithRetry() {
+  while (true) {
+    await preloadFiles();
+    const allCached = ['combined', 'guide', 'tracker'].every(k => vkFileIdCache[k]) &&
+      vkFileIdCache.wallpapers?.length === config.FILES.wallpapers.length;
+    if (allCached) { console.log('[vk] all files preloaded'); break; }
+    console.log('[vk] retrying preload in 30s...');
+    await new Promise(r => setTimeout(r, 30000));
+  }
+}
+
 function start() {
-  vk = new VK({ token: config.VK_TOKEN });
+  vk = new VK({ token: config.VK_TOKEN, uploadTimeout: 120000 });
   startLongPoll().catch(err => console.error('[vk] fatal:', err.message));
-  preloadFiles().catch(err => console.error('[vk] preload fatal:', err.message));
+  preloadWithRetry().catch(err => console.error('[vk] preload fatal:', err.message));
   console.log('[vk] bot started');
   return { send, sendText };
 }
