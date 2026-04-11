@@ -25,7 +25,11 @@ let fileIdCache = loadFileIds();
 async function send(chatId, result) {
   for (const msg of result.messages) {
     if (msg.banner) {
-      await bot.telegram.sendPhoto(chatId, { source: msg.banner });
+      try {
+        await bot.telegram.sendPhoto(chatId, { source: msg.banner });
+      } catch (err) {
+        console.error(`[telegram] banner send failed (continuing): ${err.message}`);
+      }
     }
     if (msg.button) {
       const keyboard = Markup.inlineKeyboard([
