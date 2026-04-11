@@ -1,6 +1,9 @@
 const { Telegraf, Markup } = require('telegraf');
+const https = require('https');
 const fs = require('fs');
 const config = require('../config');
+
+const ipv4Agent = new https.Agent({ family: 4 });
 const flow = require('../core/flow');
 const { handleAdminCommand } = require('../core/admin');
 const store = require('../core/store');
@@ -178,7 +181,7 @@ async function handleAdminMessage(text, platform, chatId) {
 }
 
 function start() {
-  bot = new Telegraf(config.TELEGRAM_TOKEN);
+  bot = new Telegraf(config.TELEGRAM_TOKEN, { telegram: { agent: ipv4Agent } });
 
   bot.start(async (ctx) => {
     try {
