@@ -9,10 +9,10 @@ module.exports = {
   VTB_LINK:   'https://vtb.paymo.ru/collect-money/?transaction=d67d2291-eb56-4477-9e8a-7c5dac7dcd92',
 
   // Менеджер получает уведомления о сообщениях вне сценария
-  MANAGER_VK_ID: 1104677909,
+  MANAGER_VK_IDS: [1104677909, 261076],
   MANAGER_TG_ID: 718850812,
   // Админы — команды /stats, /export, /broadcast и др.
-  ADMIN_VK_IDS: [103652699, 1104677909],
+  ADMIN_VK_IDS: [103652699, 1104677909, 261076],
   ADMIN_TELEGRAM_IDS: [718850812],
 
   FILES: {

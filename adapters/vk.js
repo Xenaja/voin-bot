@@ -127,14 +127,16 @@ async function sendText(chatId, text) {
 async function notifyManager(chatId, platform, text) {
   const platformLabel = platform === 'vk' ? 'VK' : 'Telegram';
   const msg = `💬 Сообщение вне сценария\n[${platformLabel}] ID: ${chatId}\n\n"${text}"`;
-  try {
-    await vk.api.messages.send({
-      user_id:   config.MANAGER_VK_ID,
-      message:   msg,
-      random_id: Math.random() * 1e9 | 0,
-    });
-  } catch (err) {
-    console.error('[vk] notifyManager error:', err.message);
+  for (const managerId of config.MANAGER_VK_IDS) {
+    try {
+      await vk.api.messages.send({
+        user_id:   managerId,
+        message:   msg,
+        random_id: Math.random() * 1e9 | 0,
+      });
+    } catch (err) {
+      console.error(`[vk] notifyManager error (id ${managerId}):`, err.message);
+    }
   }
 }
 
