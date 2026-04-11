@@ -270,9 +270,50 @@ async function startLongPoll() {
   }
 }
 
+async function preloadFiles() {
+  const filenames = { combined: 'Гайд+Трекер.pdf', guide: 'Гайд.pdf', tracker: 'Трекер.pdf' };
+  const PRELOAD_PEER = config.ADMIN_VK_ID;
+
+  for (const fileKey of ['combined', 'guide', 'tracker']) {
+    if (vkFileIdCache[fileKey]) { console.log(`[vk] cache hit: ${fileKey}`); continue; }
+    try {
+      console.log(`[vk] preloading ${fileKey}...`);
+      const doc = await vk.upload.messageDocument({
+        peer_id: PRELOAD_PEER,
+        source:  { value: fs.createReadStream(config.FILES[fileKey]), filename: filenames[fileKey] },
+      });
+      const ownerId = doc.owner_id ?? doc.ownerId;
+      vkFileIdCache[fileKey] = `doc${ownerId}_${doc.id}`;
+      saveVkFileIds(vkFileIdCache);
+      console.log(`[vk] preloaded ${fileKey}`);
+    } catch (err) {
+      console.error(`[vk] preload error ${fileKey}:`, err.message);
+    }
+  }
+
+  if (!vkFileIdCache.wallpapers) vkFileIdCache.wallpapers = [];
+  for (let i = 0; i < config.FILES.wallpapers.length; i++) {
+    if (vkFileIdCache.wallpapers[i]) { console.log(`[vk] cache hit: wallpaper ${i}`); continue; }
+    try {
+      console.log(`[vk] preloading wallpaper ${i}...`);
+      const photo = await vk.upload.messagePhoto({
+        peer_id: PRELOAD_PEER,
+        source:  { value: fs.createReadStream(config.FILES.wallpapers[i]) },
+      });
+      const ownerId = photo.owner_id ?? photo.ownerId;
+      vkFileIdCache.wallpapers[i] = `photo${ownerId}_${photo.id}`;
+      saveVkFileIds(vkFileIdCache);
+      console.log(`[vk] preloaded wallpaper ${i}`);
+    } catch (err) {
+      console.error(`[vk] preload error wallpaper ${i}:`, err.message);
+    }
+  }
+}
+
 function start() {
   vk = new VK({ token: config.VK_TOKEN });
   startLongPoll().catch(err => console.error('[vk] fatal:', err.message));
+  preloadFiles().catch(err => console.error('[vk] preload fatal:', err.message));
   console.log('[vk] bot started');
   return { send, sendText };
 }
