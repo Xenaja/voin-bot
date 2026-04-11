@@ -12,7 +12,7 @@ module.exports = {
   MANAGER_VK_ID: 1104677909,
   MANAGER_TG_ID: 718850812,
   // Админы — команды /stats, /export, /broadcast и др.
-  ADMIN_VK_IDS: [103652699, 261076],
+  ADMIN_VK_IDS: [103652699, 1104677909],
   ADMIN_TELEGRAM_IDS: [718850812],
 
   FILES: {

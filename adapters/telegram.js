@@ -277,6 +277,36 @@ function start() {
       const text = ctx.message.text;
       const chatId = String(ctx.chat.id);
 
+      // Менеджер отвечает на уведомление → пересылаем юзеру
+      if (
+        config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId) &&
+        ctx.message.reply_to_message
+      ) {
+        const repliedText = ctx.message.reply_to_message.text || '';
+        const match = repliedText.match(/\[(Telegram|VK)\] ID: (\d+)/i);
+        if (match) {
+          const targetPlatform = match[1].toLowerCase();
+          const targetChatId = match[2];
+          try {
+            if (targetPlatform === 'telegram') {
+              await sendText(targetChatId, text);
+            } else if (targetPlatform === 'vk') {
+              const vkAdapter = global.adapters && global.adapters.vk;
+              if (vkAdapter && vkAdapter.sendText) {
+                await vkAdapter.sendText(targetChatId, text);
+              } else {
+                await bot.telegram.sendMessage(chatId, '❌ VK адаптер недоступен');
+                return;
+              }
+            }
+            await bot.telegram.sendMessage(chatId, `✅ Отправлено [${match[1]}] ${targetChatId}`);
+          } catch (err) {
+            await bot.telegram.sendMessage(chatId, `❌ Ошибка отправки: ${err.message}`);
+          }
+          return;
+        }
+      }
+
       // Проверяем, является ли отправитель админом
       if (config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId)) {
         // Проверяем режим тестирования

@@ -26,4 +26,6 @@ global.adminRouter = {
   }
 };
 
+global.adapters = adapters;
+
 startScheduler(adapters);
