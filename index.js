@@ -1,4 +1,6 @@
 require('dotenv').config();
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 const config = require('./config');
 const { startScheduler } = require('./core/scheduler');
 const { handleGlobalAdminCommand } = require('./core/admin-router');
