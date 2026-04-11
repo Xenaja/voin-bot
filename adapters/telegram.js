@@ -135,10 +135,19 @@ function start() {
     }
   });
 
-  bot.launch().catch(err => {
-    console.error('[telegram] launch error:', err.message, '— retrying in 10s');
-    setTimeout(() => bot.launch().catch(e => console.error('[telegram] retry failed:', e.message)), 10000);
-  });
+  async function launchWithRetry() {
+    while (true) {
+      try {
+        await bot.telegram.deleteWebhook();
+        await bot.launch();
+        break;
+      } catch (err) {
+        console.error('[telegram] launch error:', err.message, '— retrying in 15s');
+        await new Promise(r => setTimeout(r, 15000));
+      }
+    }
+  }
+  launchWithRetry();
   console.log('[telegram] bot started');
 
   process.once('SIGINT', () => bot.stop('SIGINT'));
