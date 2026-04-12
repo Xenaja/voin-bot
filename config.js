@@ -5,7 +5,7 @@ module.exports = {
   VK_TOKEN:       process.env.VK_TOKEN,
   VK_GROUP_ID:    process.env.VK_GROUP_ID,
 
-  SBER_LINK:  'https://messenger.online.sberbank.ru/sl/8T3iVSXMkI7jBI1oI',
+  SBER_LINK:  'https://messenger.online.sberbank.ru/sl/RDuYHpkJzp7rzv25k',
   VTB_LINK:   'https://vtb.paymo.ru/collect-money/?transaction=d67d2291-eb56-4477-9e8a-7c5dac7dcd92',
 
   // Менеджер получает уведомления о сообщениях вне сценария
