@@ -4,3 +4,6 @@ data/
 assets/
 logs.txt
 test-vk.js
+video.mp4
+video_thumb.jpg
+upload-video.js

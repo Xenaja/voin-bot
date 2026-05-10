@@ -1,13 +1,12 @@
 {
-  "name": "voin-bot",
-  "version": "1.0.0",
+  "name": "voin-bot-v2",
+  "version": "2.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "telegraf": "^4.16.3",
-    "vk-io": "^4.10.0",
     "dotenv": "^16.4.5"
   }
 }
