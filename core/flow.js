@@ -67,7 +67,7 @@ function handleAction({ platform, chatId, action, text }) {
     if (state === 'AWAIT_PAYMENT') {
       const normalized = text.trim().toUpperCase();
       const cyrillicOnly = normalized.replace(/[^А-ЯЁ]/g, '');
-      if (cyrillicOnly.includes('ГОТОВО') || cyrillicOnly.includes('ГОТОВ')) {
+      if (cyrillicOnly.includes('ГОТОВО') || cyrillicOnly.includes('ГОТОВ') || cyrillicOnly.includes('ОТПРАВИЛ') || cyrillicOnly.includes('ОПЛАТИЛ')) {
         store.upsertUser(platform, chatId, 'COMPLETED');
         return {
           messages: [{ text: messages.MSG_4, banner: b.msg4 }],

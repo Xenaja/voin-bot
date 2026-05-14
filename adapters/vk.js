@@ -72,12 +72,13 @@ async function send(chatId, result) {
           vkFileIdCache.wallpapers[i] = attachment;
           saveVkFileIds(vkFileIdCache);
         }
-        await vk.api.messages.send({
+        const wallRes = await vk.api.messages.send({
           peer_id:    Number(chatId),
           message:    ' ',
           attachment,
           random_id:  Math.random() * 1e9 | 0,
         });
+        console.log(`[vk] ✅ wallpaper ${i} sent to ${chatId}, msg_id=${wallRes}`);
       }
     } else {
       let attachment = vkFileIdCache[fileKey];
@@ -91,12 +92,13 @@ async function send(chatId, result) {
         vkFileIdCache[fileKey] = attachment;
         saveVkFileIds(vkFileIdCache);
       }
-      await vk.api.messages.send({
+      const docRes = await vk.api.messages.send({
         peer_id:    Number(chatId),
         message:    ' ',
         attachment,
         random_id:  Math.random() * 1e9 | 0,
       });
+      console.log(`[vk] ✅ file "${fileKey}" sent to ${chatId}, msg_id=${docRes}`);
     }
   }
   for (const msg of result.trailingMessages || []) {

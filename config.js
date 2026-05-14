@@ -13,7 +13,7 @@ module.exports = {
   MANAGER_TG_ID: 718850812,
   // Админы — команды /stats, /export, /broadcast и др.
   ADMIN_VK_IDS: [103652699, 1104677909, 261076],
-  ADMIN_TELEGRAM_IDS: [718850812],
+  ADMIN_TELEGRAM_IDS: [718850812, 343054483],
 
   FILES: {
     combined:  './Gaid+tracker/Gaid-tracker-KodVoina.pdf',
