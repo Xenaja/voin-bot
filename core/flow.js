@@ -127,17 +127,10 @@ function handleAction({ chatId, action, payload }) {
 
   if (action === 'BTN_THANK_YOU' || action === 'AUTO_WALLS') {
     if (state !== 'WALLS_SENT') return { messages: [] };
-    const variant = Math.random() < 0.5 ? 'A' : 'B';
-    store.saveAbVariant(chatId, variant);
-    if (variant === 'B') {
-      store.upsertUser(chatId, 'WARMUP_B_SENT');
-      return {
-        messages: [{ text: m.MSG_B, button: { label: m.BTN_GET_B, callback: 'get_b' } }],
-      };
-    }
-    store.upsertUser(chatId, 'WARMUP1_SENT');
+    store.saveAbVariant(chatId, 'B');
+    store.upsertUser(chatId, 'WARMUP_B_SENT');
     return {
-      messages: [{ text: m.MSG8, banner: config.BANNERS.msg8, button: { label: m.BTN_TELL_ME, callback: 'tell_me' } }],
+      messages: [{ text: m.MSG_B, button: { label: m.BTN_GET_B, callback: 'get_b' } }],
     };
   }
 
