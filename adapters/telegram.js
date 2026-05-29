@@ -4,27 +4,28 @@ const config = require('../config');
 const flow = require('../core/flow');
 const { handleAdminCommand } = require('../core/admin');
 const store = require('../core/store');
+const yookassa = require('../core/yookassa');
 
 let bot;
 
-// managerId → chatId (ожидание ответа менеджера)
 const pendingReplies = new Map();
-
 const FILE_ID_CACHE_PATH = './data/tg_file_ids.json';
 
 function loadFileIds() {
   try { return JSON.parse(fs.readFileSync(FILE_ID_CACHE_PATH, 'utf-8')); } catch { return {}; }
 }
-
 function saveFileIds(cache) {
   fs.writeFileSync(FILE_ID_CACHE_PATH, JSON.stringify(cache, null, 2));
 }
-
 let fileIdCache = loadFileIds();
+
+// ─────────────────────────────────────────────
+// SEND
+// ─────────────────────────────────────────────
 
 async function send(chatId, result) {
   for (const msg of (result.messages || [])) {
-    // Баннер (фото)
+    // Баннер
     if (msg.banner) {
       try {
         const bannerKey = 'banner_' + msg.banner.replace(/[^a-z0-9]/gi, '_');
@@ -36,17 +37,18 @@ async function send(chatId, result) {
           saveFileIds(fileIdCache);
         }
       } catch (err) {
-        console.error(`[telegram] banner error (skipping): ${err.message}`);
+        console.error(`[telegram] banner error: ${err.message}`);
       }
     }
 
-    // Видео — отправляем, потом текст + кнопка + запасная ссылка
+    // Видео
     if (msg.video) {
       try {
         const videoKey = 'video_' + msg.video.replace(/[^a-z0-9]/gi, '_');
         const thumbPath = msg.video.replace(/\.[^.]+$/, '_thumb.jpg');
         const thumb = fs.existsSync(thumbPath) ? { source: thumbPath } : undefined;
         const videoOpts = { width: 1080, height: 1920, supports_streaming: true, thumbnail: thumb };
+
         if (fileIdCache[videoKey]) {
           await bot.telegram.sendVideo(chatId, fileIdCache[videoKey], videoOpts);
         } else {
@@ -54,87 +56,106 @@ async function send(chatId, result) {
           fileIdCache[videoKey] = sent.video.file_id;
           saveFileIds(fileIdCache);
         }
+
+        // Fallback ссылка в тексте сообщения
+        const textWithFallback = config.VIDEO_FALLBACK_URL
+          ? `${msg.text || ''}\n\n🔗 <a href="${config.VIDEO_FALLBACK_URL}">Если не открылось — смотри здесь</a>`.trim()
+          : (msg.text || null);
+        if (textWithFallback) {
+          const opts = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
+          if (msg.button) {
+            const keyboard = Markup.inlineKeyboard([Markup.button.callback(msg.button.label, msg.button.callback)]);
+            await bot.telegram.sendMessage(chatId, textWithFallback, { ...keyboard, ...opts });
+          } else {
+            await bot.telegram.sendMessage(chatId, textWithFallback, opts);
+          }
+        }
+        continue;
       } catch (err) {
         console.error(`[telegram] video error: ${err.message}`);
       }
-
-      // Текст описания + кнопка
-      const textWithFallback = config.VIDEO_FALLBACK_URL
-        ? `${msg.text}\n\n🔗 <a href="${config.VIDEO_FALLBACK_URL}">Если не открылось — смотри здесь</a>`
-        : msg.text;
-      const opts = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
-      if (msg.button) {
-        const keyboard = Markup.inlineKeyboard([Markup.button.callback(msg.button.label, msg.button.callback)]);
-        await bot.telegram.sendMessage(chatId, textWithFallback, { ...keyboard, ...opts });
-      } else {
-        await bot.telegram.sendMessage(chatId, textWithFallback, opts);
-      }
-      continue;
     }
 
-    // Кнопки теста (каждый вариант на отдельной строке)
-    if (msg.quizButtons && msg.quizButtons.length) {
+    // Три кнопки (3 тарифа)
+    if (msg.buttons3 && msg.buttons3.length) {
       const keyboard = Markup.inlineKeyboard(
-        msg.quizButtons.map(([label, cb]) => [Markup.button.callback(label, cb)])
+        msg.buttons3.map(b => [Markup.button.callback(b.label, b.callback)])
       );
-      await bot.telegram.sendMessage(chatId, msg.text, { ...keyboard, link_preview_options: { is_disabled: true } });
+      const opts = { ...keyboard, link_preview_options: { is_disabled: true } };
+      if (msg.parseMode) opts.parse_mode = msg.parseMode;
+      await bot.telegram.sendMessage(chatId, msg.text, opts);
       continue;
     }
 
-    // Одна кнопка
-    if (msg.button) {
-      const keyboard = Markup.inlineKeyboard([
-        Markup.button.callback(msg.button.label, msg.button.callback),
-      ]);
-      await bot.telegram.sendMessage(chatId, msg.text, { ...keyboard, link_preview_options: { is_disabled: true } });
-    } else {
-      await bot.telegram.sendMessage(chatId, msg.text, { link_preview_options: { is_disabled: true } });
+    // URL-кнопка или callback-кнопка
+    if (msg.button || msg.urlButton) {
+      const btn = msg.urlButton
+        ? Markup.button.url(msg.urlButton.label, msg.urlButton.url)
+        : Markup.button.callback(msg.button.label, msg.button.callback);
+      const keyboard = Markup.inlineKeyboard([btn]);
+      const opts = { ...keyboard, link_preview_options: { is_disabled: true } };
+      if (msg.parseMode) opts.parse_mode = msg.parseMode;
+      await bot.telegram.sendMessage(chatId, msg.text, opts);
+      continue;
     }
+
+    // Просто текст
+    const opts = { link_preview_options: { is_disabled: true } };
+    if (msg.parseMode) opts.parse_mode = msg.parseMode;
+    await bot.telegram.sendMessage(chatId, msg.text, opts);
   }
 
   // Файлы
   for (const fileKey of (result.files || [])) {
-    if (fileKey === 'wallpapers') {
-      try {
-        if (fileIdCache.wallpapers) {
-          await bot.telegram.sendMediaGroup(chatId, fileIdCache.wallpapers.map(id => ({
-            type: 'photo', media: id,
-          })));
-        } else {
-          const sent = await bot.telegram.sendMediaGroup(chatId, config.FILES.wallpapers.map(p => ({
-            type: 'photo', media: { source: p },
-          })));
-          fileIdCache.wallpapers = sent.map(s => s.photo[s.photo.length - 1].file_id);
-          saveFileIds(fileIdCache);
-        }
-      } catch (err) {
-        console.error(`[telegram] wallpapers error: ${err.message}`);
+    try {
+      if (fileIdCache[fileKey]) {
+        await bot.telegram.sendDocument(chatId, fileIdCache[fileKey]);
+      } else {
+        const sent = await bot.telegram.sendDocument(chatId, { source: config.FILES[fileKey] });
+        fileIdCache[fileKey] = sent.document.file_id;
+        saveFileIds(fileIdCache);
       }
-    } else {
-      try {
-        if (fileIdCache[fileKey]) {
-          await bot.telegram.sendDocument(chatId, fileIdCache[fileKey]);
-        } else {
-          const sent = await bot.telegram.sendDocument(chatId, { source: config.FILES[fileKey] });
-          fileIdCache[fileKey] = sent.document.file_id;
-          saveFileIds(fileIdCache);
-        }
-      } catch (err) {
-        console.error(`[telegram] file ${fileKey} error: ${err.message}`);
-      }
+    } catch (err) {
+      console.error(`[telegram] file ${fileKey} error: ${err.message}`);
     }
   }
 
   for (const msg of (result.trailingMessages || [])) {
-    if (msg.button) {
-      const keyboard = Markup.inlineKeyboard([
-        Markup.button.callback(msg.button.label, msg.button.callback),
-      ]);
-      await bot.telegram.sendMessage(chatId, msg.text, { ...keyboard, link_preview_options: { is_disabled: true } });
-    } else {
-      await bot.telegram.sendMessage(chatId, msg.text, { link_preview_options: { is_disabled: true } });
+    await bot.telegram.sendMessage(chatId, msg.text, { link_preview_options: { is_disabled: true } });
+  }
+}
+
+// Отправка с созданием платежа ЮКасса
+async function sendWithPayment(chatId, result) {
+  if (result.createPayment && config.YOOKASSA_SHOP_ID) {
+    const product = result.createPayment;
+    const amount = config[`YOOKASSA_AMOUNT_${product.toUpperCase()}`] || 990;
+    // save_payment_method для club/bundle — но только если YooKassa включила «Автоплатежи».
+    // До этого передавать флаг небезопасно: YooKassa вернёт ошибку и платёж не создастся.
+    const savePaymentMethod = config.AUTORENEW_ENABLED && (product === 'club' || product === 'bundle');
+    try {
+      const payment = await yookassa.createPayment(chatId, amount, { savePaymentMethod });
+      store.savePaymentId(chatId, payment.id);
+      const payUrl = payment.confirmation.confirmation_url;
+      const payMsg = { text: `После оплаты я пришлю все материалы в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить ${amount} ₽`, url: payUrl } };
+      if (result.messages && result.messages.length > 0) {
+        result.messages[result.messages.length - 1].urlButton = { label: `💳 Оплатить ${amount} ₽`, url: payUrl };
+      } else {
+        if (!result.messages) result.messages = [];
+        result.messages.push(payMsg);
+      }
+    } catch (err) {
+      console.error('[yookassa] createPayment error:', err.message);
+      const fallbackMsg = { text: `После оплаты я пришлю все материалы в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить`, url: config.PAYMENT_LINK } };
+      if (result.messages && result.messages.length > 0) {
+        result.messages[result.messages.length - 1].urlButton = { label: `💳 Оплатить`, url: config.PAYMENT_LINK };
+      } else {
+        if (!result.messages) result.messages = [];
+        result.messages.push(fallbackMsg);
+      }
     }
   }
+  await send(chatId, result);
 }
 
 async function sendText(chatId, text) {
@@ -143,9 +164,7 @@ async function sendText(chatId, text) {
 
 async function notifyManager(chatId, text) {
   const msg = `💬 Сообщение вне сценария\n[Telegram] ID: ${chatId}\n\n"${text}"`;
-  const keyboard = Markup.inlineKeyboard([
-    Markup.button.callback('✍️ Ответить', `reply_${chatId}`),
-  ]);
+  const keyboard = Markup.inlineKeyboard([Markup.button.callback('✍️ Ответить', `reply_${chatId}`)]);
   try {
     await bot.telegram.sendMessage(config.MANAGER_TG_ID, msg, keyboard);
   } catch (err) {
@@ -153,15 +172,48 @@ async function notifyManager(chatId, text) {
   }
 }
 
+// ─────────────────────────────────────────────
+// КЛУБ
+// ─────────────────────────────────────────────
+
+async function createClubInvite(chatId) {
+  if (!config.CLUB_CHANNEL_ID) {
+    console.error('[club] CLUB_CHANNEL_ID не задан');
+    return 'https://t.me/+7TOIRKAUYzg5MjNi'; // fallback
+  }
+  const expireDate = Math.floor(Date.now() / 1000) + config.CLUB_ACCESS_DAYS * 24 * 60 * 60;
+  const link = await bot.telegram.createChatInviteLink(config.CLUB_CHANNEL_ID, {
+    expire_date: expireDate,
+    member_limit: 1,
+    name: `user_${chatId}`,
+  });
+  return link.invite_link;
+}
+
+async function kickFromClub(chatId) {
+  if (!config.CLUB_CHANNEL_ID) return;
+  try {
+    await bot.telegram.banChatMember(config.CLUB_CHANNEL_ID, Number(chatId));
+    await bot.telegram.unbanChatMember(config.CLUB_CHANNEL_ID, Number(chatId));
+  } catch (err) {
+    console.error(`[club] kick error for ${chatId}:`, err.message);
+  }
+}
+
+// ─────────────────────────────────────────────
+// DISPATCH
+// ─────────────────────────────────────────────
+
 function isAdmin(fromId) {
   return config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId);
 }
 
 async function dispatch(chatId, action, payload, userInfo) {
+  console.log(`[dispatch] chatId=${chatId} action=${action}`);
   try {
     const result = flow.handleAction({ chatId, action, payload });
     if (userInfo) store.saveUserInfo(chatId, userInfo);
-    await send(chatId, result);
+    await sendWithPayment(chatId, result);
     if (result.notifyManager && result.originalText && String(chatId) !== String(config.MANAGER_TG_ID)) {
       await notifyManager(chatId, result.originalText);
     }
@@ -193,7 +245,7 @@ async function handleAdminMsg(text, chatId) {
     if (result.broadcast) {
       for (const item of result.broadcast) {
         if (item.platform === 'telegram') {
-          try { await sendText(item.chatId, item.text); } catch (e) { /* skip */ }
+          try { await sendText(item.chatId, item.text); } catch { /* skip */ }
         }
       }
     }
@@ -201,10 +253,9 @@ async function handleAdminMsg(text, chatId) {
   }
 }
 
-// Общий обработчик callback-кнопок с проверкой прав
 function registerAction(callbackName, action) {
   bot.action(callbackName, async (ctx) => {
-    await ctx.answerCbQuery();
+    ctx.answerCbQuery().catch(() => {}); // не блокируем если устарел
     const fromId = ctx.from.id;
     const chatId = String(ctx.chat.id);
     if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
@@ -213,17 +264,9 @@ function registerAction(callbackName, action) {
   });
 }
 
-// Callback-кнопки вопросов теста
-function registerQuizAction(callbackName) {
-  bot.action(callbackName, async (ctx) => {
-    await ctx.answerCbQuery();
-    const fromId = ctx.from.id;
-    const chatId = String(ctx.chat.id);
-    if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
-    const userInfo = { username: ctx.from.username, firstName: ctx.from.first_name };
-    await dispatch(chatId, 'BTN_QUIZ', callbackName, userInfo);
-  });
-}
+// ─────────────────────────────────────────────
+// START
+// ─────────────────────────────────────────────
 
 function start() {
   bot = new Telegraf(config.TELEGRAM_TOKEN);
@@ -235,38 +278,47 @@ function start() {
       const chatId = String(ctx.chat.id);
       if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
       const userInfo = { username: ctx.from.username, firstName: ctx.from.first_name };
-      const source = ctx.startPayload || null; // tiktok / instagram / null
+      const source = ctx.startPayload || null;
       await dispatch(chatId, 'START', source, userInfo);
     } catch (err) {
       console.error('[telegram] /start error:', err.message);
     }
   });
 
-  // /myid — для любого пользователя, чтобы узнать свой Telegram ID
+  // /myid
   bot.command('myid', async (ctx) => {
     await ctx.reply(`Твой Telegram ID: ${ctx.from.id}`);
   });
 
-  // Кнопка «Начать тест»
-  registerAction('test_start', 'BTN_TEST_START');
-
-  // Вопросы теста
-  for (const q of [1, 2, 3, 4]) {
-    for (const a of ['a', 'b', 'c']) {
-      registerQuizAction(`q${q}_${a}`);
+  // /unsubscribe — отключить автопродление клуба
+  bot.command('unsubscribe', async (ctx) => {
+    try {
+      const fromId = ctx.message.from.id;
+      const chatId = String(ctx.chat.id);
+      if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
+      const userInfo = { username: ctx.from.username, firstName: ctx.from.first_name };
+      await dispatch(chatId, 'UNSUBSCRIBE', null, userInfo);
+    } catch (err) {
+      console.error('[telegram] /unsubscribe error:', err.message);
     }
-  }
+  });
 
-  // Прогрев
-  registerAction('get_video',    'BTN_GET_VIDEO');
-  registerAction('want_anchors', 'BTN_WANT_ANCHORS');
-  registerAction('thank_you',    'BTN_THANK_YOU');
-  registerAction('tell_me',      'BTN_TELL_ME');
-  registerAction('whats_inside', 'BTN_WHATS_INSIDE');
-  registerAction('yes',          'BTN_YES');
-  registerAction('get_b',        'BTN_GET_B');
+  // Кнопки цепочки
+  registerAction('consent',    'BTN_CONSENT');
+  registerAction('watch_video','BTN_WATCH_VIDEO');
+  // Просмотр тарифа (состояние не меняется)
+  registerAction('buy_guide',  'BTN_BUY_GUIDE');
+  registerAction('buy_club',   'BTN_BUY_CLUB');
+  registerAction('buy_bundle', 'BTN_BUY_BUNDLE');
+  // Подтверждение оплаты (состояние меняется, создаётся платёж)
+  registerAction('pay_guide',  'PAY_GUIDE');
+  registerAction('pay_club',   'PAY_CLUB');
+  registerAction('pay_bundle', 'PAY_BUNDLE');
+  registerAction('renew_club',   'BTN_RENEW_CLUB');
+  // BTN_CLUB_CANCEL = «Отключить автопродление» (старое название callback сохранено)
+  registerAction('club_cancel',  'BTN_CLUB_CANCEL');
 
-  // Менеджер нажал «Ответить» под уведомлением
+  // Менеджер: кнопка «Ответить»
   bot.action(/^reply_(\d+)$/, async (ctx) => {
     await ctx.answerCbQuery();
     const targetChatId = ctx.match[1];
@@ -281,7 +333,7 @@ function start() {
       const text = ctx.message.text;
       const chatId = String(ctx.chat.id);
 
-      // Менеджер ввёл ответ после нажатия кнопки «Ответить»
+      // Менеджер: ожидает ввода ответа
       if (isAdmin(fromId) && pendingReplies.has(fromId)) {
         const targetChatId = pendingReplies.get(fromId);
         pendingReplies.delete(fromId);
@@ -294,7 +346,7 @@ function start() {
         return;
       }
 
-      // Менеджер ответил на уведомление через reply
+      // Менеджер: reply под уведомлением
       if (isAdmin(fromId) && ctx.message.reply_to_message) {
         const repliedText = ctx.message.reply_to_message.text || '';
         const match = repliedText.match(/\[Telegram\] ID: (\d+)/i);
@@ -310,14 +362,13 @@ function start() {
         }
       }
 
-      // Обычный admin (не test mode) — только команды
+      // Админ не в тест-режиме — только команды
       if (isAdmin(fromId)) {
         const testMode = store.isInTestMode(chatId);
         if (!testMode) {
           if (text.startsWith('/')) await handleAdminMsg(text, chatId);
           return;
         }
-        // Test mode: команды всё равно работают
         if (text.startsWith('/')) {
           await handleAdminMsg(text, chatId);
           return;
@@ -331,13 +382,18 @@ function start() {
     }
   });
 
-  // Ручной поллинг с timeout=0 — не держит соединение, обходит 409
+  // Ручной поллинг (обходит 409 конфликты)
   let offset = 0;
   async function poll() {
+    console.log(`[poll] START offset=${offset}`);
     try {
-      const updates = await bot.telegram.getUpdates(0, 100, offset, null);
+      const updates = await bot.telegram.getUpdates(0, 100, offset, ['message','callback_query','my_chat_member']);
+      console.log(`[poll] DONE got=${updates.length}`);
       for (const update of updates) {
         offset = update.update_id + 1;
+        const type = update.message ? 'msg:'+update.message.text?.slice(0,20) : update.callback_query ? 'cb:'+update.callback_query.data : 'other';
+        console.log(`[poll] processing ${update.update_id} ${type}`);
+        // fire-and-forget: не блокируем poll пока обрабатывается обновление
         bot.handleUpdate(update).catch(err =>
           console.error('[telegram] handleUpdate error:', err.message)
         );
@@ -357,7 +413,7 @@ function start() {
   process.once('SIGINT', () => process.exit(0));
   process.once('SIGTERM', () => process.exit(0));
 
-  return { send, sendText, notifyManager };
+  return { send, sendWithPayment, sendText, notifyManager, createClubInvite, kickFromClub };
 }
 
-module.exports = { start, send, sendText };
+module.exports = { start, send, sendWithPayment, sendText };

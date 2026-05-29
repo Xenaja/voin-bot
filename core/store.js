@@ -9,24 +9,28 @@ db.exec(`
     platform       TEXT NOT NULL DEFAULT 'telegram',
     chat_id        TEXT NOT NULL,
     state          TEXT NOT NULL,
-    q1             TEXT,
-    q2             TEXT,
-    q3             TEXT,
-    q4             TEXT,
-    archetype      TEXT,
     updated_at     TEXT DEFAULT (datetime('now')),
     reminder_count INTEGER DEFAULT 0,
     UNIQUE(platform, chat_id)
   )
 `);
 
-// Миграция: добавить колонки если их нет
+// Миграция: добавить колонки если их нет (старые тоже сохраняем — база нужна для рассылок)
 for (const col of [
-  'q1 TEXT', 'q2 TEXT', 'q3 TEXT', 'q4 TEXT', 'archetype TEXT',
   'username TEXT', 'first_name TEXT',
   'started_at TEXT', 'completed_at TEXT',
   'source TEXT',
-  'ab_variant TEXT',
+  'payment_id TEXT',
+  'product_type TEXT',           // 'guide' | 'club' | 'bundle'
+  'club_expires_at TEXT',        // ISO datetime, когда истекает доступ в клуб
+  'club_reminder_count INTEGER', // сколько напоминаний о продлении уже отправлено
+  'club_cancel INTEGER',         // 1 = пользователь отказался от продления
+  // Автосписание (recurrent) — YooKassa saved payment method
+  'payment_method_id TEXT',      // ID сохранённой карты в YooKassa (для off-session charges)
+  'auto_renew INTEGER DEFAULT 1',// 1 = автопродление включено (по умолчанию)
+  'autorenew_failed_at TEXT',    // ISO datetime последней неуспешной попытки списания
+  // legacy колонки (не используются в v2.1, но оставляем для совместимости)
+  'q1 TEXT', 'q2 TEXT', 'q3 TEXT', 'q4 TEXT', 'archetype TEXT', 'ab_variant TEXT',
 ]) {
   try { db.exec(`ALTER TABLE users ADD COLUMN ${col}`); } catch { /* уже есть */ }
 }
@@ -66,30 +70,114 @@ function setStartedAt(chatId, source) {
   db.prepare(`UPDATE users SET started_at = datetime('now') WHERE chat_id = ? AND started_at IS NULL`)
     .run(String(chatId));
   if (source) {
-    db.prepare(`UPDATE users SET source = ? WHERE chat_id = ?`)
-      .run(source, String(chatId));
+    db.prepare(`UPDATE users SET source = ? WHERE chat_id = ?`).run(source, String(chatId));
   }
 }
 
 function setCompletedAt(chatId) {
-  db.prepare(`UPDATE users SET completed_at = datetime('now') WHERE chat_id = ?`)
-    .run(String(chatId));
+  db.prepare(`UPDATE users SET completed_at = datetime('now') WHERE chat_id = ?`).run(String(chatId));
 }
 
-function saveAbVariant(chatId, variant) {
-  db.prepare(`UPDATE users SET ab_variant = ? WHERE chat_id = ?`).run(variant, String(chatId));
+function savePaymentId(chatId, paymentId) {
+  db.prepare(`UPDATE users SET payment_id = ? WHERE chat_id = ?`).run(paymentId, String(chatId));
 }
 
-function saveAnswer(chatId, qNum, answer) {
-  const col = `q${qNum}`;
-  db.prepare(`UPDATE users SET ${col} = ? WHERE chat_id = ?`).run(answer ?? null, String(chatId));
+function saveProductType(chatId, productType) {
+  db.prepare(`UPDATE users SET product_type = ? WHERE chat_id = ?`).run(productType, String(chatId));
 }
 
-function saveArchetype(chatId, archetype) {
-  db.prepare(`UPDATE users SET archetype = ? WHERE chat_id = ?`).run(archetype, String(chatId));
+function saveClubExpiry(chatId, isoDate) {
+  db.prepare(`UPDATE users SET club_expires_at = ? WHERE chat_id = ?`).run(isoDate, String(chatId));
 }
 
-// Авто-прогрессия: приветствие → Q1 через N секунд
+function setClubCancel(chatId) {
+  db.prepare(`UPDATE users SET club_cancel = 1 WHERE chat_id = ?`).run(String(chatId));
+}
+
+// Автосписание: сохранить payment_method_id и пометить autorenew=1
+function savePaymentMethodId(chatId, methodId) {
+  db.prepare(`UPDATE users SET payment_method_id = ? WHERE chat_id = ?`).run(methodId, String(chatId));
+}
+
+// Включить/выключить автопродление. При выключении — также взводим club_cancel
+// чтобы старая логика ремайндеров о продлении тоже его не трогала.
+function setAutoRenew(chatId, enabled) {
+  if (enabled) {
+    db.prepare(`UPDATE users SET auto_renew = 1, club_cancel = 0 WHERE chat_id = ?`).run(String(chatId));
+  } else {
+    db.prepare(`UPDATE users SET auto_renew = 0, club_cancel = 1 WHERE chat_id = ?`).run(String(chatId));
+  }
+}
+
+function markAutorenewFailed(chatId) {
+  db.prepare(`UPDATE users SET autorenew_failed_at = datetime('now') WHERE chat_id = ?`).run(String(chatId));
+}
+
+// Продлить club_expires_at на N дней (от текущего значения, либо от сейчас если null)
+function extendClubExpiry(chatId, days) {
+  const row = db.prepare(`SELECT club_expires_at FROM users WHERE chat_id = ?`).get(String(chatId));
+  const base = row && row.club_expires_at ? new Date(row.club_expires_at) : new Date();
+  // Если истёкший — продлеваем от сейчас, чтобы не давать «дыру»
+  const from = base < new Date() ? new Date() : base;
+  const next = new Date(from.getTime() + days * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(`UPDATE users SET club_expires_at = ?, club_reminder_count = 0, autorenew_failed_at = NULL WHERE chat_id = ?`)
+    .run(next, String(chatId));
+  return next;
+}
+
+// Кандидаты на автосписание: auto_renew=1, есть payment_method_id, истекает в ближайшие N часов,
+// ещё активный участник клуба, и не было неудачной попытки за последние 6 часов (чтобы не долбить YK).
+function getUsersForAutoRenew(hoursAhead) {
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE COALESCE(auto_renew, 1) = 1
+      AND payment_method_id IS NOT NULL
+      AND club_expires_at IS NOT NULL
+      AND club_expires_at < datetime('now', '+${Math.floor(hoursAhead)} hours')
+      AND club_expires_at > datetime('now', '-3 days')
+      AND state IN ('COMPLETED_CLUB', 'COMPLETED_BUNDLE')
+      AND (autorenew_failed_at IS NULL OR autorenew_failed_at < datetime('now', '-6 hours'))
+  `).all();
+}
+
+function incrementClubReminder(chatId) {
+  db.prepare(`UPDATE users SET club_reminder_count = COALESCE(club_reminder_count, 0) + 1 WHERE chat_id = ?`).run(String(chatId));
+}
+
+// Напоминания о продлении: за 3 дня, 1 день, в день окончания
+function getPendingClubReminders(daysBeforeExpiry, reminderIndex) {
+  const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
+  if (moscowHour >= 21 || moscowHour < 9) return [];
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE club_expires_at IS NOT NULL
+      AND club_expires_at BETWEEN datetime('now', '+${daysBeforeExpiry - 1} days') AND datetime('now', '+${daysBeforeExpiry} days')
+      AND COALESCE(club_reminder_count, 0) = ?
+      AND COALESCE(club_cancel, 0) = 0
+      AND state IN ('COMPLETED_CLUB', 'COMPLETED_BUNDLE')
+  `).all(reminderIndex);
+}
+
+// Пользователи у которых истёк клуб (для автоматического кика)
+function getExpiredClubMembers() {
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE club_expires_at IS NOT NULL
+      AND club_expires_at < datetime('now')
+      AND state IN ('COMPLETED_CLUB', 'COMPLETED_BUNDLE')
+  `).all();
+}
+
+// Все ожидающие оплаты (для ЮКасса поллинга)
+function getPendingPayments() {
+  return db.prepare(`
+    SELECT chat_id, payment_id FROM users
+    WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
+      AND payment_id IS NOT NULL
+  `).all();
+}
+
+// Авто-прогрессия WELCOME → VIDEO через N секунд
 function getPendingWelcome(seconds) {
   return db.prepare(`
     SELECT * FROM users
@@ -98,56 +186,34 @@ function getPendingWelcome(seconds) {
   `).all();
 }
 
-// Авто-прогрессия: этапы прогрева через N минут
-function getPendingWarmup(minutes) {
-  const warmupStates = ['RESULT_SENT','VIDEO_SENT','WALLS_SENT','WARMUP1_SENT','WARMUP2_SENT','WARMUP_B_SENT'];
-  const placeholders = warmupStates.map(() => '?').join(',');
+// Авто-прогрессия VIDEO → OFFER через N секунд
+function getPendingVideo(seconds) {
   return db.prepare(`
     SELECT * FROM users
-    WHERE state IN (${placeholders})
-      AND updated_at < datetime('now', '-${Math.floor(minutes)} minutes')
-  `).all(...warmupStates);
-}
-
-// Ремайндеры для завязших на вопросах теста (один раз через N часов)
-function getPendingQuizReminders(hours) {
-  const quizStates = ['Q1_SENT','Q2_SENT','Q3_SENT','Q4_SENT'];
-  const placeholders = quizStates.map(() => '?').join(',');
-  return db.prepare(`
-    SELECT * FROM users
-    WHERE state IN (${placeholders})
-      AND reminder_count = 0
-      AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
-  `).all(...quizStates);
-}
-
-// Авто-прогрессия OFFER_SEEN → AWAIT_PAYMENT через N минут
-function getPendingOfferSeen(minutes) {
-  return db.prepare(`
-    SELECT * FROM users
-    WHERE state = 'OFFER_SEEN'
-      AND updated_at < datetime('now', '-${Math.floor(minutes)} minutes')
+    WHERE state = 'VIDEO_SENT'
+      AND updated_at < datetime('now', '-${Math.floor(seconds)} seconds')
   `).all();
 }
 
-// Дожим после оффера (один раз через N часов)
-function getPendingOfferFollowup(hours) {
+// Дожимы после OFFER_SENT (reminder_count соответствует индексу в OFFER_REMINDERS_HOURS)
+function getPendingOfferReminders(reminderIndex, hours) {
+  const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
+  if (moscowHour >= 21 || moscowHour < 9) return [];
   return db.prepare(`
     SELECT * FROM users
-    WHERE state = 'AWAIT_PAYMENT'
-      AND reminder_count >= 2
-      AND reminder_count < 3
+    WHERE state = 'OFFER_SENT'
+      AND reminder_count = ${reminderIndex}
       AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
   `).all();
 }
 
-// Ремайндеры ожидания оплаты (через 1ч и 4ч, не ночью по МСК)
+// Ремайндеры ожидания оплаты (через 1ч и 4ч)
 function getPendingPaymentReminders() {
   const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
-  if (moscowHour >= 22 || moscowHour < 9) return [];
+  if (moscowHour >= 21 || moscowHour < 9) return [];
   return db.prepare(`
     SELECT * FROM users
-    WHERE state = 'AWAIT_PAYMENT'
+    WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
       AND (
         (reminder_count = 0 AND updated_at < datetime('now', '-1 hours'))
         OR
@@ -180,23 +246,26 @@ function getAllUsers() {
 }
 
 function getStats() {
-  const all = db.prepare('SELECT state, source, ab_variant FROM users').all();
-  const testDoneStates = new Set(['RESULT_SENT','VIDEO_SENT','WALLS_SENT','WARMUP1_SENT','WARMUP2_SENT','WARMUP_B_SENT','OFFER_SEEN','AWAIT_PAYMENT','COMPLETED']);
+  const all = db.prepare('SELECT state, source, product_type FROM users').all();
+  const completedStates = new Set(['COMPLETED_GUIDE', 'COMPLETED_CLUB', 'COMPLETED_BUNDLE']);
+  const paymentStates = new Set(['AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE',
+    'COMPLETED_GUIDE', 'COMPLETED_CLUB', 'COMPLETED_BUNDLE']);
+
   let started = all.length;
-  let testDone = 0, reachedPayment = 0, paid = 0;
+  let reachedPayment = 0, paid = 0;
   const bySources = {};
-  const abStats = { A: { total: 0, paid: 0 }, B: { total: 0, paid: 0 } };
-  for (const { state, source, ab_variant } of all) {
-    if (testDoneStates.has(state)) testDone++;
-    if (state === 'AWAIT_PAYMENT' || state === 'COMPLETED') reachedPayment++;
-    if (state === 'COMPLETED') paid++;
+  const byProduct = { guide: 0, club: 0, bundle: 0 };
+
+  for (const { state, source, product_type } of all) {
+    if (paymentStates.has(state)) reachedPayment++;
+    if (completedStates.has(state)) paid++;
     if (source) bySources[source] = (bySources[source] || 0) + 1;
-    if (ab_variant) {
-      abStats[ab_variant].total++;
-      if (state === 'COMPLETED') abStats[ab_variant].paid++;
+    if (product_type && completedStates.has(state)) {
+      byProduct[product_type] = (byProduct[product_type] || 0) + 1;
     }
   }
-  return { started, testDone, reachedPayment, paid, bySources, abStats };
+
+  return { started, reachedPayment, paid, bySources, byProduct };
 }
 
 module.exports = {
@@ -205,14 +274,22 @@ module.exports = {
   saveUserInfo,
   setStartedAt,
   setCompletedAt,
-  saveAbVariant,
-  saveAnswer,
-  saveArchetype,
+  savePaymentId,
+  saveProductType,
+  saveClubExpiry,
+  setClubCancel,
+  savePaymentMethodId,
+  setAutoRenew,
+  markAutorenewFailed,
+  extendClubExpiry,
+  getUsersForAutoRenew,
+  incrementClubReminder,
+  getPendingClubReminders,
+  getExpiredClubMembers,
+  getPendingPayments,
   getPendingWelcome,
-  getPendingWarmup,
-  getPendingOfferSeen,
-  getPendingQuizReminders,
-  getPendingOfferFollowup,
+  getPendingVideo,
+  getPendingOfferReminders,
   getPendingPaymentReminders,
   incrementReminderCount,
   isInTestMode,

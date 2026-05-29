@@ -610,4 +610,69 @@ BANNERS: {
 }
 ```
 
+---
+
+## 💳 АВТОПРОДЛЕНИЕ КЛУБА (recurrent / YooKassa save_payment_method)
+
+Подписка с автосписанием для продуктов `club` (490 ₽/мес) и `bundle` (первый месяц включён в 1390 ₽, со 2-го месяца — 490 ₽/мес).
+
+### Архитектура
+
+- **Колонки `users`** (миграция в `core/store.js`):
+  - `payment_method_id TEXT` — сохранённый YooKassa payment method id (off-session token)
+  - `auto_renew INTEGER DEFAULT 1` — 1 если автопродление активно
+  - `autorenew_failed_at TEXT` — ISO timestamp последней неудачной попытки списания (для 6-часового cooldown повторов)
+- **YooKassa wrapper** (`core/yookassa.js`):
+  - `createPayment(chatId, amount, { savePaymentMethod })` — при `savePaymentMethod=true` передаёт `save_payment_method: true` в YK, и после `succeeded` метод сохраняется (поле `payment.payment_method.id` + `payment.payment_method.saved=true`)
+  - `chargeSaved(paymentMethodId, amount, chatId, description)` — off-session списание по сохранённому методу (recurrent)
+- **Сохранение метода** — `core/scheduler.js` поллит `getPendingPayments`, при `succeeded` достаёт `payment.payment_method.id` (если есть) и передаёт во `flow.handlePaymentSuccess`, который сохраняет в БД и взводит `auto_renew=1`
+- **Cron автосписания** — отдельный часовой job в `scheduler.js`, активен только при `AUTORENEW_ENABLED=true && YOOKASSA_SHOP_ID`. Окно 9:00–21:00 МСК. Берёт через `store.getUsersForAutoRenew(12)` пользователей с истечением в ближайшие 12 часов, валидным `payment_method_id`, `auto_renew=1` и без свежей неудачи (`autorenew_failed_at` старше 6 часов). На каждого делает `chargeSaved` на 490 ₽:
+  - `status='succeeded'` → `store.extendClubExpiry(chatId, 30)` (продлевает от текущего `club_expires_at`, не от now — если ещё не истёк) + сбрасывает `club_reminder_count=0` + `MSG_AUTORENEW_SUCCESS(newExpiry)`
+  - `status` другой или HTTP-ошибка → `markAutorenewFailed` + `MSG_AUTORENEW_FAILED` с кнопкой `BTN_RENEW_CLUB` для ручного продления
+- **Команда `/unsubscribe`** (`adapters/telegram.js`) и кнопка `BTN_CLUB_CANCEL` («Отключить автопродление») → action `UNSUBSCRIBE` → `store.setAutoRenew(chatId, false)` (= `auto_renew=0` + `club_cancel=1` для совместимости со старым ремайндером) → MSG_CLUB_CANCEL_CONFIRM с датой окончания доступа. Доступ сохраняется до `club_expires_at`, дальше кикер удаляет.
+
+### Feature flag `AUTORENEW_ENABLED`
+
+Источник: `process.env.AUTORENEW_ENABLED === 'true'` (`config.js`). Дефолт — `false`.
+
+**`false` (stub-режим, до активации «Автоплатежей» в кабинете YooKassa):**
+
+- В `createPayment` НЕ передаётся `save_payment_method: true` (иначе YK вернёт ошибку и платёж не создастся)
+- Cron автосписания НЕ регистрируется (в логе: `[scheduler] autorenew DISABLED`)
+- Все UX-тексты про автопродление показываются как обычно (мокапы можно делать) — но фактически метод не сохраняется и cron не списывает
+- Работает старый ручной ремайндер о продлении (за 3д/1д/0д) — текст обещает автосписание, но его не будет; пользователь может продлить вручную кнопкой «Продлить за 490 ₽». Это временная неконсистенция от deploy до подключения YK
+
+**`true` (production, после активации):**
+
+- `save_payment_method: true` улетает в YK при первой покупке club/bundle, метод сохраняется
+- Cron начинает списывать с сохранённых карт за ~12 часов до истечения подписки
+- Успешное автосписание продлевает доступ +30 дней и шлёт MSG_AUTORENEW_SUCCESS; cron-расширение сбрасывает `club_reminder_count`, поэтому ручной ремайндер на следующий цикл не дублируется
+
+### Подключение «Автоплатежей» в кабинете YooKassa
+
+1. Отправить в поддержку YK скрины UX (см. `mockups/yk/*.png`):
+   - `01-msg-club.png` — экран покупки с условиями подписки
+   - `02-msg-bundle.png` — то же для бандла
+   - `03-completed-club.png` — подтверждение с датой следующего списания
+   - `04-reminder-3days.png` — предупреждение за 3 дня
+   - `05-autorenew-success.png` — уведомление об успешном автосписании
+   - `06-unsubscribe-confirm.png` — отключение автопродления через `/unsubscribe`
+2. Отдельно — оферта с условиями recurring billing (юр.часть)
+3. После активации — на сервере добавить в `.env`: `AUTORENEW_ENABLED=true` + `pm2 restart voin-bot-v2`
+
+### Сообщения и кнопки
+
+- `MSG_CLUB`, `MSG_BUNDLE` — экраны покупки с упоминанием автопродления 490 ₽/мес и команды `/unsubscribe`
+- `MSG_COMPLETED_CLUB(inviteUrl, nextChargeIso)`, `MSG_COMPLETED_BUNDLE(...)` — после оплаты, с датой следующего списания в формате «28 июня 2026»
+- `MSG_CLUB_REMINDER_3 / _1 / _0` — heads-up за 3д/1д/в день («через N дней автоматически продлится — спишется 490 ₽»)
+- `MSG_AUTORENEW_SUCCESS(nextIso)` — после успешного cron-списания
+- `MSG_AUTORENEW_FAILED` — после неудачи, с кнопкой ручного продления
+- `MSG_CLUB_CANCEL_CONFIRM(expiresIso)` — после `/unsubscribe`, с датой окончания доступа
+- `MSG_UNSUBSCRIBE_NOOP` — `/unsubscribe` от пользователя без активной подписки
+- `BTN_CLUB_CANCEL` = «Отключить автопродление» (callback `club_cancel`)
+
+### Окно рабочих часов
+
+Все ремайндеры, дожимы, кикер и cron автосписания работают только 9:00–21:00 МСК. Реализация — `if (moscowHour >= 21 || moscowHour < 9) return;` (продублировано в `core/scheduler.js` и `core/store.js`).
+
 В `flow.js`: если `config.BANNERS.msgN !== null` — отправлять фото перед текстовым сообщением.
