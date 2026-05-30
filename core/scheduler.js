@@ -83,7 +83,7 @@ function startScheduler(adapter) {
           const payment = await yookassa.getPayment(payment_id);
           if (payment.status === 'succeeded') {
             const user = store.getUser(chat_id);
-            const product = user ? user.product_type : 'guide';
+            const product = user && user.product_type ? user.product_type : 'club';
             // Сразу сбрасываем payment_id чтобы следующий цикл не обработал повторно
             store.savePaymentId(chat_id, null);
             // Сохранённый метод оплаты (есть только если save_payment_method=true сработал —
@@ -196,7 +196,7 @@ function startScheduler(adapter) {
             await adapter.send(chatId, {
               messages: [{ text: m.MSG_AUTORENEW_SUCCESS(newExpiry) }],
             });
-            console.log(`[autorenew] ✅ charged ${chatId} 490₽, next ${newExpiry}`);
+            console.log(`[autorenew] ✅ charged ${chatId} ${config.YOOKASSA_AMOUNT_CLUB}₽, next ${newExpiry}`);
           } else {
             // canceled / pending / waiting_for_capture — считаем неудачей, повторим через 6ч
             store.markAutorenewFailed(chatId);

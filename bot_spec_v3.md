@@ -614,7 +614,9 @@ BANNERS: {
 
 ## 💳 АВТОПРОДЛЕНИЕ КЛУБА (recurrent / YooKassa save_payment_method)
 
-Подписка с автосписанием для продуктов `club` (490 ₽/мес) и `bundle` (первый месяц включён в 1390 ₽, со 2-го месяца — 490 ₽/мес).
+Единственный продукт — клуб «Первый шаг», **690 ₽/мес** с автопродлением (`YOOKASSA_AMOUNT_CLUB` в `config.js`). Гайд (990 ₽) и бандл (1390 ₽) убраны из воронки. После видео (`AUTO_VIDEO`) пользователь видит селлинг-сообщение `MSG3` и единственную кнопку «Войти в Первый шаг» (callback `pay_club`) — она ведёт сразу к оплате через YooKassa, без промежуточного выбора тарифа.
+
+Legacy-пользователи со старыми `state IN (COMPLETED_GUIDE, COMPLETED_BUNDLE, AWAIT_PAYMENT_GUIDE, AWAIT_PAYMENT_BUNDLE)` остаются в БД и поддерживаются SQL-запросами в `store.js` (для bundle — даже автопродление продолжает работать, если карта была сохранена). Новые пользователи могут оказаться только в `AWAIT_PAYMENT_CLUB → COMPLETED_CLUB`.
 
 ### Архитектура
 
@@ -626,7 +628,7 @@ BANNERS: {
   - `createPayment(chatId, amount, { savePaymentMethod })` — при `savePaymentMethod=true` передаёт `save_payment_method: true` в YK, и после `succeeded` метод сохраняется (поле `payment.payment_method.id` + `payment.payment_method.saved=true`)
   - `chargeSaved(paymentMethodId, amount, chatId, description)` — off-session списание по сохранённому методу (recurrent)
 - **Сохранение метода** — `core/scheduler.js` поллит `getPendingPayments`, при `succeeded` достаёт `payment.payment_method.id` (если есть) и передаёт во `flow.handlePaymentSuccess`, который сохраняет в БД и взводит `auto_renew=1`
-- **Cron автосписания** — отдельный часовой job в `scheduler.js`, активен только при `AUTORENEW_ENABLED=true && YOOKASSA_SHOP_ID`. Окно 9:00–21:00 МСК. Берёт через `store.getUsersForAutoRenew(12)` пользователей с истечением в ближайшие 12 часов, валидным `payment_method_id`, `auto_renew=1` и без свежей неудачи (`autorenew_failed_at` старше 6 часов). На каждого делает `chargeSaved` на 490 ₽:
+- **Cron автосписания** — отдельный часовой job в `scheduler.js`, активен только при `AUTORENEW_ENABLED=true && YOOKASSA_SHOP_ID`. Окно 9:00–21:00 МСК. Берёт через `store.getUsersForAutoRenew(12)` пользователей с истечением в ближайшие 12 часов, валидным `payment_method_id`, `auto_renew=1` и без свежей неудачи (`autorenew_failed_at` старше 6 часов). На каждого делает `chargeSaved` на 690 ₽:
   - `status='succeeded'` → `store.extendClubExpiry(chatId, 30)` (продлевает от текущего `club_expires_at`, не от now — если ещё не истёк) + сбрасывает `club_reminder_count=0` + `MSG_AUTORENEW_SUCCESS(newExpiry)`
   - `status` другой или HTTP-ошибка → `markAutorenewFailed` + `MSG_AUTORENEW_FAILED` с кнопкой `BTN_RENEW_CLUB` для ручного продления
 - **Команда `/unsubscribe`** (`adapters/telegram.js`) и кнопка `BTN_CLUB_CANCEL` («Отключить автопродление») → action `UNSUBSCRIBE` → `store.setAutoRenew(chatId, false)` (= `auto_renew=0` + `club_cancel=1` для совместимости со старым ремайндером) → MSG_CLUB_CANCEL_CONFIRM с датой окончания доступа. Доступ сохраняется до `club_expires_at`, дальше кикер удаляет.
@@ -640,7 +642,7 @@ BANNERS: {
 - В `createPayment` НЕ передаётся `save_payment_method: true` (иначе YK вернёт ошибку и платёж не создастся)
 - Cron автосписания НЕ регистрируется (в логе: `[scheduler] autorenew DISABLED`)
 - Все UX-тексты про автопродление показываются как обычно (мокапы можно делать) — но фактически метод не сохраняется и cron не списывает
-- Работает старый ручной ремайндер о продлении (за 3д/1д/0д) — текст обещает автосписание, но его не будет; пользователь может продлить вручную кнопкой «Продлить за 490 ₽». Это временная неконсистенция от deploy до подключения YK
+- Работает старый ручной ремайндер о продлении (за 3д/1д/0д) — текст обещает автосписание, но его не будет; пользователь может продлить вручную кнопкой «Продлить за 690 ₽». Это временная неконсистенция от deploy до подключения YK
 
 **`true` (production, после активации):**
 
@@ -662,9 +664,9 @@ BANNERS: {
 
 ### Сообщения и кнопки
 
-- `MSG_CLUB`, `MSG_BUNDLE` — экраны покупки с упоминанием автопродления 490 ₽/мес и команды `/unsubscribe`
-- `MSG_COMPLETED_CLUB(inviteUrl, nextChargeIso)`, `MSG_COMPLETED_BUNDLE(...)` — после оплаты, с датой следующего списания в формате «28 июня 2026»
-- `MSG_CLUB_REMINDER_3 / _1 / _0` — heads-up за 3д/1д/в день («через N дней автоматически продлится — спишется 490 ₽»)
+- `MSG3` — селлинг-экран после видео с упоминанием автопродления 690 ₽/мес и команды `/unsubscribe`, плюс кнопка `BTN_ENTER_CLUB` («Войти в Первый шаг»)
+- `MSG_COMPLETED_CLUB(inviteUrl, nextChargeIso)` — после оплаты, с датой следующего списания в формате «28 июня 2026»
+- `MSG_CLUB_REMINDER_3 / _1 / _0` — heads-up за 3д/1д/в день («через N дней автоматически продлится — спишется 690 ₽»)
 - `MSG_AUTORENEW_SUCCESS(nextIso)` — после успешного cron-списания
 - `MSG_AUTORENEW_FAILED` — после неудачи, с кнопкой ручного продления
 - `MSG_CLUB_CANCEL_CONFIRM(expiresIso)` — после `/unsubscribe`, с датой окончания доступа

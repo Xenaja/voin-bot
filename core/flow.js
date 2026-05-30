@@ -3,26 +3,13 @@ const m = require('./messages');
 const config = require('../config');
 const yookassa = require('./yookassa');
 
-// Суммы по типу продукта
-const AMOUNTS = {
-  guide:  config.YOOKASSA_AMOUNT_GUIDE,
-  club:   config.YOOKASSA_AMOUNT_CLUB,
-  bundle: config.YOOKASSA_AMOUNT_BUNDLE,
-};
-
-// Состояния ожидания оплаты по продукту
-const AWAIT_STATES = {
-  guide:  'AWAIT_PAYMENT_GUIDE',
-  club:   'AWAIT_PAYMENT_CLUB',
-  bundle: 'AWAIT_PAYMENT_BUNDLE',
-};
-
-// Завершённые состояния по продукту
-const COMPLETED_STATES = {
-  guide:  'COMPLETED_GUIDE',
-  club:   'COMPLETED_CLUB',
-  bundle: 'COMPLETED_BUNDLE',
-};
+// Единственный продукт — клуб «Первый шаг», подписка с автопродлением.
+// AWAIT_STATES/COMPLETED_STATES оставлены как маппинг, чтобы legacy-пользователи
+// в COMPLETED_GUIDE/COMPLETED_BUNDLE (из старых заказов) корректно обрабатывались
+// поисковыми запросами в store.js — туда они зашиты текстом.
+const AMOUNTS = { club: config.YOOKASSA_AMOUNT_CLUB };
+const AWAIT_STATES = { club: 'AWAIT_PAYMENT_CLUB' };
+const COMPLETED_STATES = { club: 'COMPLETED_CLUB' };
 
 function handleAction({ chatId, action, payload }) {
   const user = store.getUser(chatId);
@@ -74,49 +61,27 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Авто VIDEO→OFFER
+  // Авто VIDEO→OFFER. Единственный продукт — клуб, поэтому кнопка ведёт сразу к оплате.
   if (action === 'AUTO_VIDEO') {
     if (state !== 'VIDEO_SENT') return { messages: [] };
     store.upsertUser(chatId, 'OFFER_SENT');
     return {
       messages: [{
         text: m.MSG3,
-        buttons3: [
-          { label: m.BTN_BUY_GUIDE,  callback: 'buy_guide' },
-          { label: m.BTN_BUY_BUNDLE, callback: 'buy_bundle' },
-          { label: m.BTN_BUY_CLUB,   callback: 'buy_club' },
-        ],
+        button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
       }],
     };
   }
 
-  // Просмотр тарифа — доступно из OFFER_SENT и AWAIT_PAYMENT_* (если передумал)
-  if (action === 'BTN_BUY_GUIDE' || action === 'BTN_BUY_CLUB' || action === 'BTN_BUY_BUNDLE') {
-    const canView = state === 'OFFER_SENT' || (state && state.startsWith('AWAIT_PAYMENT_'));
-    if (!canView) return { messages: [] };
-    const productMap = {
-      BTN_BUY_GUIDE:  { product: 'guide',  text: m.MSG_GUIDE,  payBtn: m.BTN_PAY_GUIDE,  payCallback: 'pay_guide' },
-      BTN_BUY_CLUB:   { product: 'club',   text: m.MSG_CLUB,   payBtn: m.BTN_PAY_CLUB,   payCallback: 'pay_club' },
-      BTN_BUY_BUNDLE: { product: 'bundle', text: m.MSG_BUNDLE, payBtn: m.BTN_PAY_BUNDLE, payCallback: 'pay_bundle' },
-    };
-    const { text, payBtn, payCallback } = productMap[action];
-    // Состояние НЕ меняем — пользователь может вернуться и выбрать другой тариф
-    return {
-      messages: [{ text, button: { label: payBtn, callback: payCallback } }],
-    };
-  }
-
-  // Подтверждение оплаты — доступно из OFFER_SENT и AWAIT_PAYMENT_* (если передумал)
-  if (action === 'PAY_GUIDE' || action === 'PAY_CLUB' || action === 'PAY_BUNDLE') {
-    const canPay = state === 'OFFER_SENT' || (state && state.startsWith('AWAIT_PAYMENT_'));
+  // Подтверждение оплаты клуба — доступно из OFFER_SENT и AWAIT_PAYMENT_CLUB (если передумал)
+  if (action === 'PAY_CLUB') {
+    const canPay = state === 'OFFER_SENT' || state === 'AWAIT_PAYMENT_CLUB';
     if (!canPay) return { messages: [] };
-    const productMap = { PAY_GUIDE: 'guide', PAY_CLUB: 'club', PAY_BUNDLE: 'bundle' };
-    const product = productMap[action];
-    store.upsertUser(chatId, AWAIT_STATES[product]);
-    store.saveProductType(chatId, product);
+    store.upsertUser(chatId, AWAIT_STATES.club);
+    store.saveProductType(chatId, 'club');
     return {
       messages: [],
-      createPayment: product,
+      createPayment: 'club',
     };
   }
 
@@ -128,11 +93,7 @@ function handleAction({ chatId, action, payload }) {
     return {
       messages: [{
         text,
-        buttons3: [
-          { label: m.BTN_BUY_GUIDE,  callback: 'buy_guide' },
-          { label: m.BTN_BUY_BUNDLE, callback: 'buy_bundle' },
-          { label: m.BTN_BUY_CLUB,   callback: 'buy_club' },
-        ],
+        button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
       }],
     };
   }
@@ -160,12 +121,12 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Продление клуба
+  // Ручное продление клуба (BTN_RENEW_CLUB или BTN_RESUME_CLUB)
   if (action === 'BTN_RENEW_CLUB') {
     store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
     store.saveProductType(chatId, 'club');
     return {
-      messages: [{ text: m.MSG_CLUB }],
+      messages: [],
       createPayment: 'club',
     };
   }
@@ -183,11 +144,7 @@ function handleAction({ chatId, action, payload }) {
       return {
         messages: [{
           text: m.FALLBACK_PRESS_BUTTON,
-          buttons3: [
-            { label: m.BTN_BUY_GUIDE,  callback: 'buy_guide' },
-            { label: m.BTN_BUY_BUNDLE, callback: 'buy_bundle' },
-            { label: m.BTN_BUY_CLUB,   callback: 'buy_club' },
-          ],
+          button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
         }],
       };
     }
@@ -203,41 +160,18 @@ function handleAction({ chatId, action, payload }) {
 // Вызывается после успешного платежа ЮКассой.
 // paymentMethodId — id сохранённой карты, передаётся scheduler'ом если save_payment_method=true.
 async function handlePaymentSuccess({ chatId, product, createInvite, paymentMethodId }) {
-  const completedState = COMPLETED_STATES[product] || 'COMPLETED_GUIDE';
-  store.upsertUser(chatId, completedState);
+  store.upsertUser(chatId, 'COMPLETED_CLUB');
   store.setCompletedAt(chatId);
 
-  if (product === 'guide') {
-    return {
-      messages: [{ text: m.MSG_COMPLETED_GUIDE, banner: config.BANNERS.msg11 }],
-      files: ['guide', 'tracker', 'print_tracker'],
-      trailingMessages: [{ text: m.MSG_COMPLETED_GUIDE_TRAILING }],
-    };
-  }
-
-  // Для club/bundle — сохраняем дату истечения, метод оплаты и включаем автопродление
   const expires = new Date(Date.now() + config.CLUB_ACCESS_DAYS * 24 * 60 * 60 * 1000).toISOString();
   store.saveClubExpiry(chatId, expires);
   store.setAutoRenew(chatId, true);
   if (paymentMethodId) store.savePaymentMethodId(chatId, paymentMethodId);
 
-  if (product === 'club') {
-    const inviteUrl = await createInvite(chatId);
-    return {
-      messages: [{ text: m.MSG_COMPLETED_CLUB(inviteUrl, expires) }],
-    };
-  }
-
-  if (product === 'bundle') {
-    const inviteUrl = await createInvite(chatId);
-    return {
-      messages: [{ text: m.MSG_COMPLETED_GUIDE, banner: config.BANNERS.msg11 }],
-      files: ['guide', 'tracker', 'print_tracker'],
-      trailingMessages: [{ text: m.MSG_COMPLETED_BUNDLE(inviteUrl, expires) }],
-    };
-  }
-
-  return { messages: [] };
+  const inviteUrl = await createInvite(chatId);
+  return {
+    messages: [{ text: m.MSG_COMPLETED_CLUB(inviteUrl, expires) }],
+  };
 }
 
 module.exports = { handleAction, handlePaymentSuccess, AWAIT_STATES, COMPLETED_STATES };

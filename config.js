@@ -6,10 +6,8 @@ module.exports = {
   // ЮКасса
   YOOKASSA_SHOP_ID: process.env.YOOKASSA_SHOP_ID || '',
   YOOKASSA_SECRET_KEY: process.env.YOOKASSA_SECRET_KEY || '',
-  // Суммы по тарифам
-  YOOKASSA_AMOUNT_GUIDE:  990,
-  YOOKASSA_AMOUNT_CLUB:   490,
-  YOOKASSA_AMOUNT_BUNDLE: 1390,
+  // Единственный продукт — клуб «Первый шаг», подписка с автопродлением
+  YOOKASSA_AMOUNT_CLUB: 690,
 
   // Автосписание клуба. Включается во .env=true ПОСЛЕ того, как YooKassa подключит
   // опцию «Автоплатежи» в кабинете (по запросу со скринами UX). До этого UX-тексты

@@ -129,10 +129,10 @@ async function send(chatId, result) {
 async function sendWithPayment(chatId, result) {
   if (result.createPayment && config.YOOKASSA_SHOP_ID) {
     const product = result.createPayment;
-    const amount = config[`YOOKASSA_AMOUNT_${product.toUpperCase()}`] || 990;
-    // save_payment_method для club/bundle — но только если YooKassa включила «Автоплатежи».
-    // До этого передавать флаг небезопасно: YooKassa вернёт ошибку и платёж не создастся.
-    const savePaymentMethod = config.AUTORENEW_ENABLED && (product === 'club' || product === 'bundle');
+    const amount = config[`YOOKASSA_AMOUNT_${product.toUpperCase()}`] || config.YOOKASSA_AMOUNT_CLUB;
+    // save_payment_method передаём только если YooKassa включила «Автоплатежи».
+    // До этого флаг небезопасен: YooKassa вернёт ошибку и платёж не создастся.
+    const savePaymentMethod = config.AUTORENEW_ENABLED;
     try {
       const payment = await yookassa.createPayment(chatId, amount, { savePaymentMethod });
       store.savePaymentId(chatId, payment.id);
@@ -304,19 +304,13 @@ function start() {
   });
 
   // Кнопки цепочки
-  registerAction('consent',    'BTN_CONSENT');
-  registerAction('watch_video','BTN_WATCH_VIDEO');
-  // Просмотр тарифа (состояние не меняется)
-  registerAction('buy_guide',  'BTN_BUY_GUIDE');
-  registerAction('buy_club',   'BTN_BUY_CLUB');
-  registerAction('buy_bundle', 'BTN_BUY_BUNDLE');
-  // Подтверждение оплаты (состояние меняется, создаётся платёж)
-  registerAction('pay_guide',  'PAY_GUIDE');
-  registerAction('pay_club',   'PAY_CLUB');
-  registerAction('pay_bundle', 'PAY_BUNDLE');
-  registerAction('renew_club',   'BTN_RENEW_CLUB');
+  registerAction('consent',     'BTN_CONSENT');
+  registerAction('watch_video', 'BTN_WATCH_VIDEO');
+  // Единственная кнопка оплаты — клуб; ведёт сразу на YooKassa
+  registerAction('pay_club',    'PAY_CLUB');
+  registerAction('renew_club',  'BTN_RENEW_CLUB');
   // BTN_CLUB_CANCEL = «Отключить автопродление» (старое название callback сохранено)
-  registerAction('club_cancel',  'BTN_CLUB_CANCEL');
+  registerAction('club_cancel', 'BTN_CLUB_CANCEL');
 
   // Менеджер: кнопка «Ответить»
   bot.action(/^reply_(\d+)$/, async (ctx) => {
