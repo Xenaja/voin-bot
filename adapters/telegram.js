@@ -137,7 +137,7 @@ async function sendWithPayment(chatId, result) {
       const payment = await yookassa.createPayment(chatId, amount, { savePaymentMethod });
       store.savePaymentId(chatId, payment.id);
       const payUrl = payment.confirmation.confirmation_url;
-      const payMsg = { text: `После оплаты я пришлю все материалы в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить ${amount} ₽`, url: payUrl } };
+      const payMsg = { text: `После оплаты я пришлю ссылку для входа в закрытый клуб «Первый шаг» в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить ${amount} ₽`, url: payUrl } };
       if (result.messages && result.messages.length > 0) {
         result.messages[result.messages.length - 1].urlButton = { label: `💳 Оплатить ${amount} ₽`, url: payUrl };
       } else {
@@ -146,7 +146,7 @@ async function sendWithPayment(chatId, result) {
       }
     } catch (err) {
       console.error('[yookassa] createPayment error:', err.message);
-      const fallbackMsg = { text: `После оплаты я пришлю все материалы в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить`, url: config.PAYMENT_LINK } };
+      const fallbackMsg = { text: `После оплаты я пришлю ссылку для входа в закрытый клуб «Первый шаг» в течение 1 минуты 👌`, urlButton: { label: `💳 Оплатить`, url: config.PAYMENT_LINK } };
       if (result.messages && result.messages.length > 0) {
         result.messages[result.messages.length - 1].urlButton = { label: `💳 Оплатить`, url: config.PAYMENT_LINK };
       } else {
