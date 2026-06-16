@@ -290,6 +290,24 @@ function start() {
     await ctx.reply(`Твой Telegram ID: ${ctx.from.id}`);
   });
 
+  // /help — справка + контакт Оператора (упомянут в политике конфиденциальности, п.9)
+  bot.command('help', async (ctx) => {
+    try {
+      await ctx.reply(
+        '👋 Я бот «Код Воина».\n\n' +
+        'Команды:\n' +
+        '/start — начать заново\n' +
+        '/stop — отписаться от рассылки\n' +
+        '/delete — удалить свои данные\n\n' +
+        'По любым вопросам — в том числе по политике конфиденциальности и обработке данных — ' +
+        'напиши прямо сюда, я передам Оператору, он ответит.\n\n' +
+        '📧 Также можно написать на почту: voin_alex04@mail.ru'
+      );
+    } catch (err) {
+      console.error('[telegram] /help error:', err.message);
+    }
+  });
+
   // /unsubscribe — отключить автопродление клуба
   bot.command('unsubscribe', async (ctx) => {
     try {
