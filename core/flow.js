@@ -24,6 +24,8 @@ function handleAction({ chatId, action, payload }) {
   if (action === 'START') {
     store.upsertUser(chatId, 'CONSENT_SENT');
     store.setStartedAt(chatId, payload);
+    store.setOptOut(chatId, false); // вернулся по /start — снова подписан на рассылки
+
     return {
       messages: [{
         text: m.MSG_CONSENT,

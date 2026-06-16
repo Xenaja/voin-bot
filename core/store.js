@@ -29,6 +29,8 @@ for (const col of [
   'payment_method_id TEXT',      // ID сохранённой карты в YooKassa (для off-session charges)
   'auto_renew INTEGER DEFAULT 1',// 1 = автопродление включено (по умолчанию)
   'autorenew_failed_at TEXT',    // ISO datetime последней неуспешной попытки списания
+  // Политика конфиденциальности: команда /stop — отказ от рассылки
+  'opt_out INTEGER DEFAULT 0',   // 1 = пользователь отписался от рассылок/напоминаний (/stop)
   // legacy колонки (не используются в v2.1, но оставляем для совместимости)
   'q1 TEXT', 'q2 TEXT', 'q3 TEXT', 'q4 TEXT', 'archetype TEXT', 'ab_variant TEXT',
 ]) {
@@ -59,6 +61,16 @@ function upsertUser(chatId, state) {
       updated_at     = datetime('now'),
       reminder_count = 0
   `).run(String(chatId), state);
+}
+
+// Политика конфиденциальности: /delete — полное удаление данных пользователя
+function deleteUser(chatId) {
+  db.prepare('DELETE FROM users WHERE chat_id = ?').run(String(chatId));
+}
+
+// Политика конфиденциальности: /stop — отписка от рассылок. /start снова включает (opt_out=0).
+function setOptOut(chatId, enabled) {
+  db.prepare('UPDATE users SET opt_out = ? WHERE chat_id = ?').run(enabled ? 1 : 0, String(chatId));
 }
 
 function saveUserInfo(chatId, { username, firstName }) {
@@ -154,6 +166,7 @@ function getPendingClubReminders(daysBeforeExpiry, reminderIndex) {
       AND club_expires_at BETWEEN datetime('now', '+${daysBeforeExpiry - 1} days') AND datetime('now', '+${daysBeforeExpiry} days')
       AND COALESCE(club_reminder_count, 0) = ?
       AND COALESCE(club_cancel, 0) = 0
+      AND COALESCE(opt_out, 0) = 0
       AND state IN ('COMPLETED_CLUB', 'COMPLETED_BUNDLE')
   `).all(reminderIndex);
 }
@@ -182,6 +195,7 @@ function getPendingWelcome(seconds) {
   return db.prepare(`
     SELECT * FROM users
     WHERE state = 'WELCOME_SENT'
+      AND COALESCE(opt_out, 0) = 0
       AND updated_at < datetime('now', '-${Math.floor(seconds)} seconds')
   `).all();
 }
@@ -191,6 +205,7 @@ function getPendingVideo(seconds) {
   return db.prepare(`
     SELECT * FROM users
     WHERE state = 'VIDEO_SENT'
+      AND COALESCE(opt_out, 0) = 0
       AND updated_at < datetime('now', '-${Math.floor(seconds)} seconds')
   `).all();
 }
@@ -202,6 +217,7 @@ function getPendingOfferReminders(reminderIndex, hours) {
   return db.prepare(`
     SELECT * FROM users
     WHERE state = 'OFFER_SENT'
+      AND COALESCE(opt_out, 0) = 0
       AND reminder_count = ${reminderIndex}
       AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
   `).all();
@@ -214,6 +230,7 @@ function getPendingPaymentReminders() {
   return db.prepare(`
     SELECT * FROM users
     WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
+      AND COALESCE(opt_out, 0) = 0
       AND (
         (reminder_count = 0 AND updated_at < datetime('now', '-1 hours'))
         OR
@@ -271,6 +288,8 @@ function getStats() {
 module.exports = {
   getUser,
   upsertUser,
+  deleteUser,
+  setOptOut,
   saveUserInfo,
   setStartedAt,
   setCompletedAt,

@@ -27,7 +27,7 @@ const TEXT = `Привет! Это Саша 👋
 const URL = 'https://messenger.online.sberbank.ru/sl/iG5BSZHjgdNGIWbGo';
 
 async function run() {
-  const users = db.prepare("SELECT chat_id FROM users WHERE state='AWAIT_PAYMENT'").all();
+  const users = db.prepare("SELECT chat_id FROM users WHERE state='AWAIT_PAYMENT' AND COALESCE(opt_out,0)=0").all();
   console.log('Отправляем:', users.length);
   let sent = 0, failed = 0;
   for (const { chat_id } of users) {

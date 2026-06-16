@@ -157,14 +157,16 @@ function startScheduler(adapter) {
       try {
         await adapter.kickFromClub(user.chat_id);
         store.saveClubExpiry(user.chat_id, null);
-        // Прощальное сообщение + кнопка возобновить
-        await adapter.send(user.chat_id, {
-          messages: [{
-            text: m.MSG_CLUB_KICKED,
-            button: { label: m.BTN_RESUME_CLUB, callback: 'renew_club' },
-          }],
-        });
-        console.log(`[club] kicked ${user.chat_id}`);
+        // Прощальное сообщение + кнопка возобновить — только если не отписан (/stop)
+        if (!user.opt_out) {
+          await adapter.send(user.chat_id, {
+            messages: [{
+              text: m.MSG_CLUB_KICKED,
+              button: { label: m.BTN_RESUME_CLUB, callback: 'renew_club' },
+            }],
+          });
+        }
+        console.log(`[club] kicked ${user.chat_id}${user.opt_out ? ' (opt_out, no farewell)' : ''}`);
       } catch (err) {
         console.error(`[club] kick error for ${user.chat_id}:`, err.message);
       }

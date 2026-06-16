@@ -303,6 +303,37 @@ function start() {
     }
   });
 
+  // /stop — отказ от рассылки (политика конфиденциальности)
+  bot.command('stop', async (ctx) => {
+    try {
+      const fromId = ctx.message.from.id;
+      const chatId = String(ctx.chat.id);
+      if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
+      store.setOptOut(chatId, true);
+      await ctx.reply('🔕 Готово. Больше не буду присылать тебе рассылки и напоминания.\n\nЕсли передумаешь — напиши /start, и всё вернётся.');
+    } catch (err) {
+      console.error('[telegram] /stop error:', err.message);
+    }
+  });
+
+  // /delete — удаление своих данных (политика конфиденциальности)
+  bot.command('delete', async (ctx) => {
+    try {
+      const fromId = ctx.message.from.id;
+      const chatId = String(ctx.chat.id);
+      if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
+      const u = store.getUser(chatId);
+      // Если активный участник клуба — убираем из закрытого канала
+      if (u && (u.state === 'COMPLETED_CLUB' || u.state === 'COMPLETED_BUNDLE')) {
+        await kickFromClub(chatId);
+      }
+      store.deleteUser(chatId);
+      await ctx.reply('🗑 Готово. Все твои данные удалены из бота.\n\nЕсли захочешь вернуться — просто напиши /start.');
+    } catch (err) {
+      console.error('[telegram] /delete error:', err.message);
+    }
+  });
+
   // Кнопки цепочки
   registerAction('consent',     'BTN_CONSENT');
   registerAction('watch_video', 'BTN_WATCH_VIDEO');
