@@ -21,19 +21,12 @@ async function runAction(adapter, chatId, action, payload) {
 
 function startScheduler(adapter) {
 
-  // WELCOME → VIDEO через 30 сек (проверяем каждые 15 сек)
+  // Фолбэк Экран 2 → Экран 3: если на экране ценности не нажали кнопку за
+  // WELCOME_AUTO_SECONDS — авто-показ оффера (чтобы дойти до цены и попасть в дожимы)
   setInterval(async () => {
     const users = store.getPendingWelcome(config.WELCOME_AUTO_SECONDS);
     for (const user of users) {
       await runAction(adapter, user.chat_id, 'AUTO_WELCOME', null);
-    }
-  }, 15 * 1000);
-
-  // VIDEO → OFFER через 30 сек (проверяем каждые 15 сек)
-  setInterval(async () => {
-    const users = store.getPendingVideo(config.VIDEO_AUTO_SECONDS);
-    for (const user of users) {
-      await runAction(adapter, user.chat_id, 'AUTO_VIDEO', null);
     }
   }, 15 * 1000);
 

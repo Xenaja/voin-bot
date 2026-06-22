@@ -41,41 +41,6 @@ async function send(chatId, result) {
       }
     }
 
-    // Видео
-    if (msg.video) {
-      try {
-        const videoKey = 'video_' + msg.video.replace(/[^a-z0-9]/gi, '_');
-        const thumbPath = msg.video.replace(/\.[^.]+$/, '_thumb.jpg');
-        const thumb = fs.existsSync(thumbPath) ? { source: thumbPath } : undefined;
-        const videoOpts = { width: 1080, height: 1920, supports_streaming: true, thumbnail: thumb };
-
-        if (fileIdCache[videoKey]) {
-          await bot.telegram.sendVideo(chatId, fileIdCache[videoKey], videoOpts);
-        } else {
-          const sent = await bot.telegram.sendVideo(chatId, { source: msg.video }, videoOpts);
-          fileIdCache[videoKey] = sent.video.file_id;
-          saveFileIds(fileIdCache);
-        }
-
-        // Fallback ссылка в тексте сообщения
-        const textWithFallback = config.VIDEO_FALLBACK_URL
-          ? `${msg.text || ''}\n\n🔗 <a href="${config.VIDEO_FALLBACK_URL}">Если не открылось — смотри здесь</a>`.trim()
-          : (msg.text || null);
-        if (textWithFallback) {
-          const opts = { parse_mode: 'HTML', link_preview_options: { is_disabled: true } };
-          if (msg.button) {
-            const keyboard = Markup.inlineKeyboard([Markup.button.callback(msg.button.label, msg.button.callback)]);
-            await bot.telegram.sendMessage(chatId, textWithFallback, { ...keyboard, ...opts });
-          } else {
-            await bot.telegram.sendMessage(chatId, textWithFallback, opts);
-          }
-        }
-        continue;
-      } catch (err) {
-        console.error(`[telegram] video error: ${err.message}`);
-      }
-    }
-
     // Три кнопки (3 тарифа)
     if (msg.buttons3 && msg.buttons3.length) {
       const keyboard = Markup.inlineKeyboard(
@@ -353,8 +318,8 @@ function start() {
   });
 
   // Кнопки цепочки
-  registerAction('consent',     'BTN_CONSENT');
-  registerAction('watch_video', 'BTN_WATCH_VIDEO');
+  registerAction('consent', 'BTN_CONSENT');
+  registerAction('want',    'BTN_WANT');
   // Единственная кнопка оплаты — клуб; ведёт сразу на YooKassa
   registerAction('pay_club',    'PAY_CLUB');
   registerAction('renew_club',  'BTN_RENEW_CLUB');

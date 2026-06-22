@@ -35,41 +35,27 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Кнопка «Начать» (согласие)
+  // Экран 1 → Экран 2: кнопка «Начать» (согласие) показывает ценность клуба + баннер
   if (action === 'BTN_CONSENT') {
     if (state !== 'CONSENT_SENT') return { messages: [] };
     store.upsertUser(chatId, 'WELCOME_SENT');
     return {
       messages: [{
-        text: m.MSG1,
+        text: m.MSG_VALUE,
         banner: config.BANNERS.msg0,
-        button: { label: m.BTN_WATCH_VIDEO, callback: 'watch_video' },
+        button: { label: m.BTN_WANT, callback: 'want' },
       }],
     };
   }
 
-  // Кнопка «Смотреть видео» / авто WELCOME→VIDEO
-  if (action === 'BTN_WATCH_VIDEO' || action === 'AUTO_WELCOME') {
+  // Экран 2 → Экран 3: кнопка «Я с вами» / авто-фолбэк показывает оффер с ценой + оплатой
+  if (action === 'BTN_WANT' || action === 'AUTO_WELCOME') {
     if (state !== 'WELCOME_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'VIDEO_SENT');
-    const hasVideo = !!config.VIDEO_FILE;
-    return {
-      messages: [{
-        text: hasVideo ? m.MSG2 : m.MSG2_NO_VIDEO,
-        parseMode: hasVideo ? null : 'HTML',
-        video: hasVideo ? config.VIDEO_FILE : null,
-        button: null, // кнопки нет — авто через 30 сек
-      }],
-    };
-  }
-
-  // Авто VIDEO→OFFER. Единственный продукт — клуб, поэтому кнопка ведёт сразу к оплате.
-  if (action === 'AUTO_VIDEO') {
-    if (state !== 'VIDEO_SENT') return { messages: [] };
     store.upsertUser(chatId, 'OFFER_SENT');
     return {
       messages: [{
-        text: m.MSG3,
+        text: m.MSG_OFFER,
+        parseMode: 'HTML',
         button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
       }],
     };
@@ -151,7 +137,7 @@ function handleAction({ chatId, action, payload }) {
       };
     }
     if (state === 'WELCOME_SENT') {
-      return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_WATCH_VIDEO, callback: 'watch_video' } }] };
+      return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_WANT, callback: 'want' } }] };
     }
     return { messages: [{ text: m.FALLBACK_IDLE }], notifyManager: true, originalText: payload };
   }

@@ -33,18 +33,14 @@ module.exports = {
     print_tracker: './Gaid+tracker/Трекер для печати.pdf',
   },
 
-  VIDEO_FILE: './video.mp4',
-  VIDEO_FALLBACK_URL: 'https://drive.google.com/file/d/1U1Hyc8B9242HjujoohvJN1XRKofJL5S3/view?usp=sharing',
-
   BANNERS: {
-    msg0:  './visual/1.jpg',
+    msg0:  './visual/1.jpg',  // баннер на Экране 2 (ценность клуба)
     msg11: './visual/2.jpg',
   },
 
-  // Авто-прогрессия (секунды → минуты)
-  WELCOME_AUTO_SECONDS: 30,  // WELCOME → VIDEO
-  VIDEO_AUTO_SECONDS:   30,  // VIDEO → OFFER
+  // Фолбэк-авто-переход Экран 2 (ценность) → Экран 3 (оффер), если не нажали кнопку
+  WELCOME_AUTO_SECONDS: 60,
 
   // Дожимы после OFFER_SENT
-  OFFER_REMINDERS_HOURS: [6, 24, 72, 120], // 6ч, 1д, 3д, 5д
+  OFFER_REMINDERS_HOURS: [6, 24, 72], // 6ч, 1д, 3д
 };

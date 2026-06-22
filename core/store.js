@@ -200,16 +200,6 @@ function getPendingWelcome(seconds) {
   `).all();
 }
 
-// Авто-прогрессия VIDEO → OFFER через N секунд
-function getPendingVideo(seconds) {
-  return db.prepare(`
-    SELECT * FROM users
-    WHERE state = 'VIDEO_SENT'
-      AND COALESCE(opt_out, 0) = 0
-      AND updated_at < datetime('now', '-${Math.floor(seconds)} seconds')
-  `).all();
-}
-
 // Дожимы после OFFER_SENT (reminder_count соответствует индексу в OFFER_REMINDERS_HOURS)
 function getPendingOfferReminders(reminderIndex, hours) {
   const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
@@ -307,7 +297,6 @@ module.exports = {
   getExpiredClubMembers,
   getPendingPayments,
   getPendingWelcome,
-  getPendingVideo,
   getPendingOfferReminders,
   getPendingPaymentReminders,
   incrementReminderCount,
