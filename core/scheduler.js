@@ -30,39 +30,23 @@ function startScheduler(adapter) {
     }
   }, 15 * 1000);
 
-  // Дожимы после OFFER_SENT (6ч, 24ч, 72ч, 120ч)
+  // Дожимы ожидания оплаты (тёплые «я жду» — 6ч/24ч/72ч из REMINDER_HOURS).
+  // Оффер сразу переводит в AWAIT_PAYMENT_CLUB, так что дожимы живут тут. У каждого —
+  // кнопка оплаты (по клику PAY_CLUB создаёт свежую ссылку, если первая устарела).
   setInterval(async () => {
-    const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
-    if (moscowHour >= 21 || moscowHour < 9) return;
-    const reminders = config.OFFER_REMINDERS_HOURS;
+    const reminders = config.REMINDER_HOURS;
     for (let i = 0; i < reminders.length; i++) {
-      const users = store.getPendingOfferReminders(i, reminders[i]);
+      const users = store.getPendingPaymentReminders(i, reminders[i]);
       for (const user of users) {
         try {
-          const result = flow.handleAction({ chatId: user.chat_id, action: 'OFFER_REMINDER', payload: i });
+          const result = flow.handleAction({ chatId: user.chat_id, action: 'REMINDER_PAYMENT', payload: i });
           if (result.messages && result.messages.length > 0) {
             await adapter.send(user.chat_id, result);
             store.incrementReminderCount(user.chat_id);
           }
         } catch (err) {
-          console.error(`[scheduler] offer reminder error for ${user.chat_id}:`, err.message);
+          console.error(`[scheduler] payment reminder error for ${user.chat_id}:`, err.message);
         }
-      }
-    }
-  }, 60 * 60 * 1000);
-
-  // Ремайндеры ожидания оплаты (через 1ч и 4ч)
-  setInterval(async () => {
-    const users = store.getPendingPaymentReminders();
-    for (const user of users) {
-      try {
-        const result = flow.handleAction({ chatId: user.chat_id, action: 'REMINDER_PAYMENT', payload: null });
-        if (result.messages && result.messages.length > 0) {
-          await adapter.send(user.chat_id, result);
-          store.incrementReminderCount(user.chat_id);
-        }
-      } catch (err) {
-        console.error(`[scheduler] payment reminder error for ${user.chat_id}:`, err.message);
       }
     }
   }, 60 * 60 * 1000);

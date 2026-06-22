@@ -48,16 +48,20 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Экран 2 → Экран 3: кнопка «Я с вами» / авто-фолбэк показывает оффер с ценой + оплатой
+  // Экран 2 → Экран 3: оффер СРАЗУ со ссылкой на оплату — одно сообщение.
+  // Платёж YooKassa создаётся здесь же (createPayment), кнопка «Оплатить» встаёт прямо
+  // под текстом оффера. Пользователь сразу в AWAIT_PAYMENT_CLUB — дожимы про оплату
+  // работают на этом стейте. upsertUser сбрасывает reminder_count в 0 (дожимы с нуля).
   if (action === 'BTN_WANT' || action === 'AUTO_WELCOME') {
     if (state !== 'WELCOME_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'OFFER_SENT');
+    store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
+    store.saveProductType(chatId, 'club');
     return {
       messages: [{
         text: m.MSG_OFFER,
         parseMode: 'HTML',
-        button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
       }],
+      createPayment: 'club',
     };
   }
 
@@ -73,9 +77,10 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Дожим оффера (scheduler)
-  if (action === 'OFFER_REMINDER') {
-    if (state !== 'OFFER_SENT') return { messages: [] };
+  // Дожимы ожидания оплаты (scheduler): тёплые «я жду» 6ч/24ч/72ч, каждый с кнопкой
+  // оплаты — по клику PAY_CLUB создаёт СВЕЖУЮ ссылку (на случай, если первая устарела).
+  if (action === 'REMINDER_PAYMENT') {
+    if (!state || !state.startsWith('AWAIT_PAYMENT_')) return { messages: [] };
     const idx = typeof payload === 'number' ? payload : 0;
     const text = m.OFFER_REMINDERS[idx] || m.OFFER_REMINDERS[m.OFFER_REMINDERS.length - 1];
     return {
@@ -84,14 +89,6 @@ function handleAction({ chatId, action, payload }) {
         button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
       }],
     };
-  }
-
-  // Ремайндеры ожидания оплаты (scheduler)
-  if (action === 'REMINDER_PAYMENT') {
-    if (!state || !state.startsWith('AWAIT_PAYMENT_')) return { messages: [] };
-    const fresh = store.getUser(chatId);
-    const text = fresh.reminder_count === 0 ? m.REMINDER_PAYMENT_1 : m.REMINDER_PAYMENT_2;
-    return { messages: [{ text }] };
   }
 
   // Отказ от автопродления клуба (кнопка в ремайндере или команда /unsubscribe).

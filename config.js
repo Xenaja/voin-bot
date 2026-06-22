@@ -41,6 +41,6 @@ module.exports = {
   // Фолбэк-авто-переход Экран 2 (ценность) → Экран 3 (оффер), если не нажали кнопку
   WELCOME_AUTO_SECONDS: 60,
 
-  // Дожимы после OFFER_SENT
-  OFFER_REMINDERS_HOURS: [6, 24, 72], // 6ч, 1д, 3д
+  // Дожимы ожидания оплаты (AWAIT_PAYMENT_CLUB): 6ч, 1д, 3д
+  REMINDER_HOURS: [6, 24, 72],
 };

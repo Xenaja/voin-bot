@@ -200,32 +200,17 @@ function getPendingWelcome(seconds) {
   `).all();
 }
 
-// Дожимы после OFFER_SENT (reminder_count соответствует индексу в OFFER_REMINDERS_HOURS)
-function getPendingOfferReminders(reminderIndex, hours) {
-  const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
-  if (moscowHour >= 21 || moscowHour < 9) return [];
-  return db.prepare(`
-    SELECT * FROM users
-    WHERE state = 'OFFER_SENT'
-      AND COALESCE(opt_out, 0) = 0
-      AND reminder_count = ${reminderIndex}
-      AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
-  `).all();
-}
-
-// Ремайндеры ожидания оплаты (через 1ч и 4ч)
-function getPendingPaymentReminders() {
+// Дожимы ожидания оплаты (reminder_count = индекс в REMINDER_HOURS, напр. 6ч/24ч/72ч).
+// Оффер сразу переводит юзера в AWAIT_PAYMENT_CLUB, поэтому дожимы живут на этом стейте.
+function getPendingPaymentReminders(reminderIndex, hours) {
   const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
   if (moscowHour >= 21 || moscowHour < 9) return [];
   return db.prepare(`
     SELECT * FROM users
     WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
       AND COALESCE(opt_out, 0) = 0
-      AND (
-        (reminder_count = 0 AND updated_at < datetime('now', '-1 hours'))
-        OR
-        (reminder_count = 1 AND updated_at < datetime('now', '-4 hours'))
-      )
+      AND reminder_count = ${reminderIndex}
+      AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
   `).all();
 }
 
@@ -297,7 +282,6 @@ module.exports = {
   getExpiredClubMembers,
   getPendingPayments,
   getPendingWelcome,
-  getPendingOfferReminders,
   getPendingPaymentReminders,
   incrementReminderCount,
   isInTestMode,
