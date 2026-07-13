@@ -190,18 +190,9 @@ function getPendingPayments() {
   `).all();
 }
 
-// Авто-прогрессия WELCOME → VIDEO через N секунд
-function getPendingWelcome(seconds) {
-  return db.prepare(`
-    SELECT * FROM users
-    WHERE state = 'WELCOME_SENT'
-      AND COALESCE(opt_out, 0) = 0
-      AND updated_at < datetime('now', '-${Math.floor(seconds)} seconds')
-  `).all();
-}
-
-// Дожимы ожидания оплаты (reminder_count = индекс в REMINDER_HOURS, напр. 6ч/24ч/72ч).
-// Оффер сразу переводит юзера в AWAIT_PAYMENT_CLUB, поэтому дожимы живут на этом стейте.
+// Дожимы ожидания оплаты (reminder_count = индекс в REMINDER_HOURS: день 1/3/6).
+// Оффер (Шаг 5) переводит юзера в AWAIT_PAYMENT_CLUB — дожимы живут ТОЛЬКО на этом стейте.
+// Кто застрял раньше (INTRO_SENT/ABOUT_SENT) — не дожимаем (цену не видел).
 function getPendingPaymentReminders(reminderIndex, hours) {
   const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
   if (moscowHour >= 21 || moscowHour < 9) return [];
@@ -281,7 +272,6 @@ module.exports = {
   getPendingClubReminders,
   getExpiredClubMembers,
   getPendingPayments,
-  getPendingWelcome,
   getPendingPaymentReminders,
   incrementReminderCount,
   isInTestMode,

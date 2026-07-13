@@ -35,25 +35,39 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Экран 1 → Экран 2: кнопка «Начать» (согласие) показывает ценность клуба + баннер
+  // Согласие → авто-цепочка знакомства: [Начать] →(3с)→ Шаг 2 →(5с)→ Шаг 3.
+  // Приветствие (бывший Шаг 1) показано уже на экране согласия. Два сообщения уходят
+  // пачкой; delayBefore заставляет адаптер выждать паузу перед каждым (точные задержки,
+  // не через планировщик). Шаг 3 — с кнопкой «Расскажи про клуб». Состояние INTRO_SENT.
   if (action === 'BTN_CONSENT') {
     if (state !== 'CONSENT_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'WELCOME_SENT');
+    store.upsertUser(chatId, 'INTRO_SENT');
+    return {
+      messages: [
+        { text: m.MSG_STEP2, delayBefore: config.INTRO_DELAYS[0] },
+        { text: m.MSG_STEP3, delayBefore: config.INTRO_DELAYS[1], button: { label: m.BTN_ABOUT, callback: 'about' } },
+      ],
+    };
+  }
+
+  // Шаг 3 → Шаг 4: кнопка «Расскажи про клуб» показывает, что внутри клуба.
+  if (action === 'BTN_ABOUT') {
+    if (state !== 'INTRO_SENT') return { messages: [] };
+    store.upsertUser(chatId, 'ABOUT_SENT');
     return {
       messages: [{
-        text: m.MSG_VALUE,
-        banner: config.BANNERS.msg0,
+        text: m.MSG_STEP4,
         button: { label: m.BTN_WANT, callback: 'want' },
       }],
     };
   }
 
-  // Экран 2 → Экран 3: оффер СРАЗУ со ссылкой на оплату — одно сообщение.
+  // Шаг 4 → Шаг 5: оффер СРАЗУ со ссылкой на оплату — одно сообщение.
   // Платёж YooKassa создаётся здесь же (createPayment), кнопка «Оплатить» встаёт прямо
   // под текстом оффера. Пользователь сразу в AWAIT_PAYMENT_CLUB — дожимы про оплату
-  // работают на этом стейте. upsertUser сбрасывает reminder_count в 0 (дожимы с нуля).
-  if (action === 'BTN_WANT' || action === 'AUTO_WELCOME') {
-    if (state !== 'WELCOME_SENT') return { messages: [] };
+  // работают ТОЛЬКО на этом стейте. upsertUser сбрасывает reminder_count в 0 (дожимы с нуля).
+  if (action === 'BTN_WANT') {
+    if (state !== 'ABOUT_SENT') return { messages: [] };
     store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
     store.saveProductType(chatId, 'club');
     return {
@@ -77,8 +91,8 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Дожимы ожидания оплаты (scheduler): тёплые «я жду» 6ч/24ч/72ч, каждый с кнопкой
-  // оплаты — по клику PAY_CLUB создаёт СВЕЖУЮ ссылку (на случай, если первая устарела).
+  // Дожимы ожидания оплаты (scheduler): день 1/3/6, только на AWAIT_PAYMENT_CLUB.
+  // Каждый с кнопкой оплаты — по клику PAY_CLUB создаёт СВЕЖУЮ ссылку.
   if (action === 'REMINDER_PAYMENT') {
     if (!state || !state.startsWith('AWAIT_PAYMENT_')) return { messages: [] };
     const idx = typeof payload === 'number' ? payload : 0;
@@ -125,15 +139,10 @@ function handleAction({ chatId, action, payload }) {
     if (state && state.startsWith('AWAIT_PAYMENT_')) {
       return { messages: [{ text: m.FALLBACK_AWAIT_PAYMENT }], notifyManager: true, originalText: payload };
     }
-    if (state === 'OFFER_SENT') {
-      return {
-        messages: [{
-          text: m.FALLBACK_PRESS_BUTTON,
-          button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
-        }],
-      };
+    if (state === 'INTRO_SENT') {
+      return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_ABOUT, callback: 'about' } }] };
     }
-    if (state === 'WELCOME_SENT') {
+    if (state === 'ABOUT_SENT') {
       return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_WANT, callback: 'want' } }] };
     }
     return { messages: [{ text: m.FALLBACK_IDLE }], notifyManager: true, originalText: payload };

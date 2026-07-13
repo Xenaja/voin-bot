@@ -21,18 +21,13 @@ async function runAction(adapter, chatId, action, payload) {
 
 function startScheduler(adapter) {
 
-  // Фолбэк Экран 2 → Экран 3: если на экране ценности не нажали кнопку за
-  // WELCOME_AUTO_SECONDS — авто-показ оффера (чтобы дойти до цены и попасть в дожимы)
-  setInterval(async () => {
-    const users = store.getPendingWelcome(config.WELCOME_AUTO_SECONDS);
-    for (const user of users) {
-      await runAction(adapter, user.chat_id, 'AUTO_WELCOME', null);
-    }
-  }, 15 * 1000);
+  // Авто-цепочка знакомства (Шаг 1→2→3) идёт прямо в момент клика «Начать» с точными
+  // задержками (delayBefore в адаптере) — планировщик для неё не нужен.
+  // Дожимов до оффера нет: кто застрял на Шаге 3/4, напоминаний не получает.
 
-  // Дожимы ожидания оплаты (тёплые «я жду» — 6ч/24ч/72ч из REMINDER_HOURS).
-  // Оффер сразу переводит в AWAIT_PAYMENT_CLUB, так что дожимы живут тут. У каждого —
-  // кнопка оплаты (по клику PAY_CLUB создаёт свежую ссылку, если первая устарела).
+  // Дожимы ожидания оплаты (день 1/3/6 из REMINDER_HOURS) — ТОЛЬКО для AWAIT_PAYMENT_CLUB
+  // (кто дошёл до оффера, но не оплатил). У каждого — кнопка оплаты (PAY_CLUB создаёт
+  // свежую ссылку, если первая устарела).
   setInterval(async () => {
     const reminders = config.REMINDER_HOURS;
     for (let i = 0; i < reminders.length; i++) {

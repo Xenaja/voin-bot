@@ -25,6 +25,10 @@ let fileIdCache = loadFileIds();
 
 async function send(chatId, result) {
   for (const msg of (result.messages || [])) {
+    // Пауза перед сообщением (авто-цепочка знакомства: Шаг 2 через 3с, Шаг 3 через 5с).
+    // Поллинг не блокируется — handleUpdate запускается fire-and-forget.
+    if (msg.delayBefore) await new Promise(r => setTimeout(r, msg.delayBefore));
+
     // Баннер
     if (msg.banner) {
       try {
@@ -319,6 +323,7 @@ function start() {
 
   // Кнопки цепочки
   registerAction('consent', 'BTN_CONSENT');
+  registerAction('about',   'BTN_ABOUT');
   registerAction('want',    'BTN_WANT');
   // Единственная кнопка оплаты — клуб; ведёт сразу на YooKassa
   registerAction('pay_club',    'PAY_CLUB');
