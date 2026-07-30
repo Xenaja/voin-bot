@@ -26,6 +26,21 @@ function handleAction({ chatId, action, payload }) {
     store.setStartedAt(chatId, payload);
     store.setOptOut(chatId, false); // вернулся по /start — снова подписан на рассылки
 
+    // Deep-link из старого бота: покупатель «Кода Воина» → сразу оффер клуба С кнопкой оплаты
+    // в одном сообщении (createPayment вешает urlButton на MSG_REACTIVATE). Не общая воронка.
+    // source='reactivate' сохранён setStartedAt → исключит из клубных дожимов v2 (их шлёт v1).
+    if (payload === 'reactivate') {
+      store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
+      store.saveProductType(chatId, 'club');
+      return {
+        messages: [{
+          text: m.MSG_REACTIVATE,
+          parseMode: 'HTML',
+        }],
+        createPayment: 'club',
+      };
+    }
+
     return {
       messages: [{
         text: m.MSG_CONSENT,

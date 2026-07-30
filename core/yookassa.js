@@ -36,8 +36,12 @@ async function createPayment(chatId, amount = 990, options = {}) {
 // Off-session списание по сохранённому методу (recurrent). Требует подключённых
 // «Автоплатежей» в кабинете YooKassa. Возвращает payment object — обычно сразу
 // status='succeeded' либо 'canceled'.
-async function chargeSaved(paymentMethodId, amount, chatId, description) {
-  const idempotenceKey = uuidv4();
+//
+// idempotenceKey ОБЯЗАТЕЛЬНО передавать детерминированным (renew-<chatId>-<expiry>):
+// если списание прошло, а мы не успели продлить срок в БД (падение процесса, обрыв сети),
+// следующий прогон cron'а с тем же ключом получит от ЮКассы ТОТ ЖЕ платёж, а не спишет
+// деньги второй раз. С случайным ключом это был бы двойной платёж.
+async function chargeSaved(paymentMethodId, amount, chatId, description, idempotenceKey = uuidv4()) {
   const response = await axios.post(
     `${BASE_URL}/payments`,
     {

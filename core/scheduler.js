@@ -93,35 +93,50 @@ function startScheduler(adapter) {
     const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
     if (moscowHour >= 21 || moscowHour < 9) return;
 
-    const sendClubReminder = async (user, text, reminderIdx) => {
+    // Спишется ли у пользователя автоматически? Только если ЮКасса сохранила метод оплаты
+    // (карта — СБП/T-Bank/SberPay/ЮMoney не сохраняются), автопродление не отключено
+    // и сам механизм автосписания включён. От этого зависит ТЕКСТ напоминания.
+    const willAutoCharge = (user) => Boolean(
+      config.AUTORENEW_ENABLED
+      && user.payment_method_id
+      && (user.auto_renew === null || user.auto_renew === undefined || user.auto_renew === 1)
+      && !user.club_cancel
+    );
+
+    const sendClubReminder = async (user, autoText, manualText, reminderIdx) => {
+      const auto = willAutoCharge(user);
       try {
         await adapter.send(user.chat_id, {
           messages: [{
-            text,
-            buttons3: [
-              { label: m.BTN_RENEW_CLUB,  callback: 'renew_club' },
-              { label: m.BTN_CLUB_CANCEL, callback: 'club_cancel' },
-            ],
+            text: auto ? autoText : manualText,
+            // Кнопку «Отключить автопродление» показываем только тем, у кого автосписание
+            // реально произойдёт — остальным отключать нечего.
+            ...(auto
+              ? { buttons3: [
+                  { label: m.BTN_RENEW_CLUB,  callback: 'renew_club' },
+                  { label: m.BTN_CLUB_CANCEL, callback: 'club_cancel' },
+                ] }
+              : { button: { label: m.BTN_RENEW_CLUB, callback: 'renew_club' } }),
           }],
         });
         store.incrementClubReminder(user.chat_id);
-        console.log(`[club] reminder ${reminderIdx} sent to ${user.chat_id}`);
+        console.log(`[club] reminder ${reminderIdx} sent to ${user.chat_id} (${auto ? 'auto' : 'manual'})`);
       } catch (err) {
         console.error(`[club] reminder error for ${user.chat_id}:`, err.message);
       }
     };
 
-    // За 3 дня (reminderCount = 0)
-    for (const u of store.getPendingClubReminders(3, 0)) {
-      await sendClubReminder(u, m.MSG_CLUB_REMINDER_3, 3);
+    // За 3 дня — истечение через 48–72ч (reminderCount = 0)
+    for (const u of store.getPendingClubReminders(48, 72, 0)) {
+      await sendClubReminder(u, m.MSG_CLUB_REMINDER_3, m.MSG_CLUB_MANUAL_REMINDER_3, 3);
     }
-    // За 1 день (reminderCount = 1)
-    for (const u of store.getPendingClubReminders(1, 1)) {
-      await sendClubReminder(u, m.MSG_CLUB_REMINDER_1, 1);
+    // За сутки — истечение через 12–36ч (reminderCount = 1)
+    for (const u of store.getPendingClubReminders(12, 36, 1)) {
+      await sendClubReminder(u, m.MSG_CLUB_REMINDER_1, m.MSG_CLUB_MANUAL_REMINDER_1, 1);
     }
-    // В день окончания (reminderCount = 2)
-    for (const u of store.getPendingClubReminders(0, 2)) {
-      await sendClubReminder(u, m.MSG_CLUB_REMINDER_0, 0);
+    // В последний день — истечение в ближайшие 12ч, ещё ДО кика (reminderCount = 2)
+    for (const u of store.getPendingClubReminders(0, 12, 2)) {
+      await sendClubReminder(u, m.MSG_CLUB_REMINDER_0, m.MSG_CLUB_MANUAL_REMINDER_0, 0);
     }
 
     // Кик тех, у кого истёк доступ (reminderCount >= 3 или club_cancel = 1)
@@ -158,12 +173,17 @@ function startScheduler(adapter) {
       const users = store.getUsersForAutoRenew(12);
       for (const user of users) {
         const chatId = user.chat_id;
+        // Повторная попытка (cooldown 6ч) идёт с ТЕМ ЖЕ ключом идемпотентности — привязан
+        // к периоду подписки. ЮКасса на повтор вернёт уже созданный платёж, а не спишет второй раз.
+        const idempotenceKey = `renew-${chatId}-${user.club_expires_at}`;
+        const isRetry = Boolean(user.autorenew_failed_at);
         try {
           const payment = await yookassa.chargeSaved(
             user.payment_method_id,
             config.YOOKASSA_AMOUNT_CLUB,
             chatId,
-            `Продление клуба «Первый шаг» — ${chatId}`
+            `Продление клуба «Первый шаг» — ${chatId}`,
+            idempotenceKey
           );
           if (payment.status === 'succeeded') {
             const newExpiry = store.extendClubExpiry(chatId, config.CLUB_ACCESS_DAYS);
@@ -172,15 +192,23 @@ function startScheduler(adapter) {
             });
             console.log(`[autorenew] ✅ charged ${chatId} ${config.YOOKASSA_AMOUNT_CLUB}₽, next ${newExpiry}`);
           } else {
-            // canceled / pending / waiting_for_capture — считаем неудачей, повторим через 6ч
+            // canceled — окончательный отказ (карта, лимит, 3DS): пишем сразу.
+            // pending / waiting_for_capture — платёж ещё в процессе: на ПЕРВОЙ попытке молчим,
+            // через 6ч тот же ключ вернёт финальный статус. Пугаем только если и тогда не успех.
+            const terminal = payment.status === 'canceled';
             store.markAutorenewFailed(chatId);
-            await adapter.send(chatId, {
-              messages: [{
-                text: m.MSG_AUTORENEW_FAILED,
-                button: { label: m.BTN_RENEW_CLUB, callback: 'renew_club' },
-              }],
-            });
-            console.warn(`[autorenew] ⚠️ ${chatId} status=${payment.status}`);
+            if (terminal || isRetry) {
+              await adapter.send(chatId, {
+                messages: [{
+                  text: m.MSG_AUTORENEW_FAILED,
+                  button: { label: m.BTN_RENEW_CLUB, callback: 'renew_club' },
+                }],
+              });
+            }
+            const cd = payment.cancellation_details;
+            console.warn(`[autorenew] ⚠️ ${chatId} status=${payment.status}`
+              + (cd ? ` reason=${cd.party}/${cd.reason}` : '')
+              + (terminal || isRetry ? ' [user notified]' : ' [silent, will retry]'));
           }
         } catch (err) {
           // HTTP-ошибка YooKassa (карта истекла, отклонена, лимит) — фолбэк на ручное продление

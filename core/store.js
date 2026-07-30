@@ -156,14 +156,17 @@ function incrementClubReminder(chatId) {
   db.prepare(`UPDATE users SET club_reminder_count = COALESCE(club_reminder_count, 0) + 1 WHERE chat_id = ?`).run(String(chatId));
 }
 
-// Напоминания о продлении: за 3 дня, 1 день, в день окончания
-function getPendingClubReminders(daysBeforeExpiry, reminderIndex) {
+// Напоминания о продлении. Окна заданы в ЧАСАХ до истечения и не пересекаются:
+// 48–72ч («через 3 дня», count=0), 12–36ч («завтра», count=1), 0–12ч («сегодня», count=2).
+// Все три — ДО club_expires_at: раньше последнее окно было (-24ч…0ч), то есть уходило
+// уже после истечения, в том же часовом тике, что и кик из канала.
+function getPendingClubReminders(hoursFrom, hoursTo, reminderIndex) {
   const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
   if (moscowHour >= 21 || moscowHour < 9) return [];
   return db.prepare(`
     SELECT * FROM users
     WHERE club_expires_at IS NOT NULL
-      AND club_expires_at BETWEEN datetime('now', '+${daysBeforeExpiry - 1} days') AND datetime('now', '+${daysBeforeExpiry} days')
+      AND club_expires_at BETWEEN datetime('now', '+${Math.floor(hoursFrom)} hours') AND datetime('now', '+${Math.floor(hoursTo)} hours')
       AND COALESCE(club_reminder_count, 0) = ?
       AND COALESCE(club_cancel, 0) = 0
       AND COALESCE(opt_out, 0) = 0
@@ -200,6 +203,7 @@ function getPendingPaymentReminders(reminderIndex, hours) {
     SELECT * FROM users
     WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
       AND COALESCE(opt_out, 0) = 0
+      AND COALESCE(source, '') != 'reactivate'
       AND reminder_count = ${reminderIndex}
       AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
   `).all();
