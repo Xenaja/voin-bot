@@ -31,6 +31,9 @@ for (const col of [
   'autorenew_failed_at TEXT',    // ISO datetime последней неуспешной попытки списания
   // Политика конфиденциальности: команда /stop — отказ от рассылки
   'opt_out INTEGER DEFAULT 0',   // 1 = пользователь отписался от рассылок/напоминаний (/stop)
+  // Акция «бесплатный месяц» 06.08.2026: 1 = зашёл бесплатно и ещё ни разу не платил.
+  // Сбрасывается в 0 при первой успешной оплате — дальше обычные ремайндеры.
+  'trial INTEGER DEFAULT 0',
   // legacy колонки (не используются в v2.1, но оставляем для совместимости)
   'q1 TEXT', 'q2 TEXT', 'q3 TEXT', 'q4 TEXT', 'archetype TEXT', 'ab_variant TEXT',
 ]) {
@@ -125,6 +128,31 @@ function markAutorenewFailed(chatId) {
   db.prepare(`UPDATE users SET autorenew_failed_at = datetime('now') WHERE chat_id = ?`).run(String(chatId));
 }
 
+// Акция «бесплатный месяц»: флаг триальщика (сбрасывается при первой оплате)
+function setTrial(chatId, enabled) {
+  db.prepare(`UPDATE users SET trial = ? WHERE chat_id = ?`).run(enabled ? 1 : 0, String(chatId));
+}
+
+// Перешли по trial-диплинку, но не нажали кнопку. reminder_count на этом стейте свободен
+// (дожимы оплаты живут только на AWAIT_PAYMENT_*), используем его как флаг «последний созыв отправлен».
+function getTrialLastCallPending() {
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE state = 'TRIAL_OFFER_SENT'
+      AND COALESCE(opt_out, 0) = 0
+      AND COALESCE(reminder_count, 0) = 0
+  `).all();
+}
+
+// Все зависшие на trial-оффере (для перевода в обычную оплату после закрытия окна)
+function getTrialOfferUsers() {
+  return db.prepare(`
+    SELECT * FROM users
+    WHERE state = 'TRIAL_OFFER_SENT'
+      AND COALESCE(opt_out, 0) = 0
+  `).all();
+}
+
 // Продлить club_expires_at на N дней (от текущего значения, либо от сейчас если null)
 function extendClubExpiry(chatId, days) {
   const row = db.prepare(`SELECT club_expires_at FROM users WHERE chat_id = ?`).get(String(chatId));
@@ -184,11 +212,15 @@ function getExpiredClubMembers() {
   `).all();
 }
 
-// Все ожидающие оплаты (для ЮКасса поллинга)
+// Все ожидающие оплаты (для ЮКасса поллинга).
+// COMPLETED_CLUB/BUNDLE тоже: действующий участник, продлевающий по кнопке «Продлить»,
+// остаётся в своём стейте (не роняем его в AWAIT — иначе кикер и дожимы ломаются),
+// его платёж ловим здесь по payment_id.
 function getPendingPayments() {
   return db.prepare(`
     SELECT chat_id, payment_id FROM users
-    WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE')
+    WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE',
+                    'COMPLETED_CLUB', 'COMPLETED_BUNDLE')
       AND payment_id IS NOT NULL
   `).all();
 }
@@ -270,6 +302,9 @@ module.exports = {
   savePaymentMethodId,
   setAutoRenew,
   markAutorenewFailed,
+  setTrial,
+  getTrialLastCallPending,
+  getTrialOfferUsers,
   extendClubExpiry,
   getUsersForAutoRenew,
   incrementClubReminder,

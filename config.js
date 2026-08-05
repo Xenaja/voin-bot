@@ -21,6 +21,14 @@ module.exports = {
   CLUB_CHANNEL_ID: process.env.CLUB_CHANNEL_ID ? Number(process.env.CLUB_CHANNEL_ID) : null,
   CLUB_ACCESS_DAYS: 30,
 
+  // Акция «бесплатный месяц» 06.08.2026 (вход из сторис по диплинку ?start=trial0608).
+  // Продлить окно: TRIAL_END в .env (ISO с +03:00) + pm2 restart.
+  TRIAL_SOURCE: 'trial0608',
+  TRIAL_END: process.env.TRIAL_END || '2026-08-06T23:59:00+03:00',
+  // Последний созыв (сообщение тем, кто перешёл, но не нажал кнопку) — окно отправки МСК
+  TRIAL_REMIND_FROM:  '2026-08-06T18:00:00+03:00',
+  TRIAL_REMIND_UNTIL: '2026-08-06T22:00:00+03:00',
+
   // Менеджер и админы
   MANAGER_TG_ID: process.env.MANAGER_TG_ID ? Number(process.env.MANAGER_TG_ID) : 718850812,
   ADMIN_TELEGRAM_IDS: process.env.ADMIN_TELEGRAM_IDS

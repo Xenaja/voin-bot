@@ -325,6 +325,23 @@ function start() {
   registerAction('consent', 'BTN_CONSENT');
   registerAction('about',   'BTN_ABOUT');
   registerAction('want',    'BTN_WANT');
+  // Акция «бесплатный месяц»: отдельный обработчик — выдача инвайта асинхронная,
+  // через registerAction/handleAction (sync) её не провести.
+  bot.action('trial_join', async (ctx) => {
+    ctx.answerCbQuery().catch(() => {});
+    const fromId = ctx.from.id;
+    const chatId = String(ctx.chat.id);
+    if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
+    console.log(`[dispatch] chatId=${chatId} action=TRIAL_JOIN`);
+    try {
+      store.saveUserInfo(chatId, { username: ctx.from.username, firstName: ctx.from.first_name });
+      const result = await flow.handleTrialJoin({ chatId, createInvite: createClubInvite });
+      // sendWithPayment: в ветке «окно закрыто» результат может содержать createPayment
+      await sendWithPayment(chatId, result);
+    } catch (err) {
+      console.error('[telegram] trial_join error:', err.message);
+    }
+  });
   // Единственная кнопка оплаты — клуб; ведёт сразу на YooKassa
   registerAction('pay_club',    'PAY_CLUB');
   registerAction('renew_club',  'BTN_RENEW_CLUB');
