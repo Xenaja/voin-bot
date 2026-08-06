@@ -232,7 +232,7 @@ function getPendingPayments() {
   return db.prepare(`
     SELECT chat_id, payment_id FROM users
     WHERE state IN ('AWAIT_PAYMENT_GUIDE', 'AWAIT_PAYMENT_CLUB', 'AWAIT_PAYMENT_BUNDLE',
-                    'COMPLETED_CLUB', 'COMPLETED_BUNDLE')
+                    'COMPLETED_CLUB', 'COMPLETED_BUNDLE', 'TRIAL_OFFER_SENT')
       AND payment_id IS NOT NULL
   `).all();
 }
