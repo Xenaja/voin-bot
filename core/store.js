@@ -133,6 +133,18 @@ function setTrial(chatId, enabled) {
   db.prepare(`UPDATE users SET trial = ? WHERE chat_id = ?`).run(enabled ? 1 : 0, String(chatId));
 }
 
+// Старт бесплатного месяца: календарный месяц от СЕЙЧАС (6 авг → 6 сен), безусловная
+// перезапись expiry. Не extendClubExpiry: тот тянет хвост от старой даты — повторный вход
+// после /reset давал +2 месяца. Счётчик ремайндеров и failed-флаг с нуля.
+function startClubTrial(chatId) {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 1);
+  const iso = d.toISOString();
+  db.prepare(`UPDATE users SET club_expires_at = ?, club_reminder_count = 0, autorenew_failed_at = NULL WHERE chat_id = ?`)
+    .run(iso, String(chatId));
+  return iso;
+}
+
 // Перешли по trial-диплинку, но не нажали кнопку. reminder_count на этом стейте свободен
 // (дожимы оплаты живут только на AWAIT_PAYMENT_*), используем его как флаг «последний созыв отправлен».
 function getTrialLastCallPending() {
@@ -303,6 +315,7 @@ module.exports = {
   setAutoRenew,
   markAutorenewFailed,
   setTrial,
+  startClubTrial,
   getTrialLastCallPending,
   getTrialOfferUsers,
   extendClubExpiry,

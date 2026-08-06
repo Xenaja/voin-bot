@@ -266,7 +266,8 @@ async function handleTrialJoin({ chatId, createInvite }) {
   store.saveProductType(chatId, 'trial'); // в /stats конверсия видна отдельно; при оплате станет 'club'
   store.setTrial(chatId, true);
   store.setAutoRenew(chatId, true); // снимает club_cancel у «возвращенцев» — иначе ремайндеры их пропустят
-  const expires = store.extendClubExpiry(chatId, config.CLUB_ACCESS_DAYS);
+  const expires = store.startClubTrial(chatId); // календарный месяц от сейчас, expiry перезаписывается
+
 
   const inviteUrl = await createInvite(chatId);
   return {
