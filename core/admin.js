@@ -15,8 +15,9 @@ function handleAdminCommand(text, platform = 'telegram', chatId = null) {
       if (s.paid > 0) {
         out += `\n💰 По продуктам:\n`;
         out += `  Код Воина (990₽): ${s.byProduct.guide || 0}\n`;
-        out += `  Только клуб (490₽): ${s.byProduct.club || 0}\n`;
+        out += `  Только клуб (690₽): ${s.byProduct.club || 0}\n`;
         out += `  Гайд + Клуб (1390₽): ${s.byProduct.bundle || 0}\n`;
+        if (s.byProduct.trial) out += `  Клуб бесплатно (акция): ${s.byProduct.trial}\n`;
       }
       if (s.bySources && Object.keys(s.bySources).length > 0) {
         out += `\n📍 По источникам:\n`;
