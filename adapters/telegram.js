@@ -5,6 +5,7 @@ const flow = require('../core/flow');
 const { handleAdminCommand } = require('../core/admin');
 const store = require('../core/store');
 const yookassa = require('../core/yookassa');
+const m = require('../core/messages');
 
 let bot;
 
@@ -177,8 +178,44 @@ function isAdmin(fromId) {
   return config.ADMIN_TELEGRAM_IDS && config.ADMIN_TELEGRAM_IDS.includes(fromId);
 }
 
+// Заглушка «клуб стал бесплатным». Одна и та же на /start, на любую кнопку
+// и на произвольный текст: продавать больше нечего, вести некуда, кроме канала.
+async function sendClubFreeStub(chatId) {
+  await send(chatId, {
+    messages: [{
+      text: m.MSG_CLUB_FREE,
+      urlButton: { label: m.BTN_CLUB_OPEN, url: config.CLUB_PUBLIC_LINK },
+    }],
+  });
+}
+
 async function dispatch(chatId, action, payload, userInfo) {
   console.log(`[dispatch] chatId=${chatId} action=${action}`);
+
+  // Воронка выключена: клуб бесплатный, канал открыт. Пользователя не ведём по шагам
+  // и не создаём платежей — отдаём один экран со ссылкой. Данные при этом продолжаем
+  // сохранять, а вопросы людей по-прежнему уходят менеджеру: иначе живое обращение
+  // утонет в заглушке.
+  if (config.CLUB_FREE_STUB) {
+    try {
+      // Нового человека заводим, существующему состояние НЕ трогаем: upsertUser
+      // перезаписал бы state и сбросил счётчики, и мы потеряли бы, кто был
+      // участником клуба и кто платил.
+      if (!store.getUser(chatId)) {
+        store.upsertUser(chatId, 'CLUB_FREE');
+        if (action === 'START') store.setStartedAt(chatId, payload || null);
+      }
+      if (userInfo) store.saveUserInfo(chatId, userInfo);
+      await sendClubFreeStub(chatId);
+      if (action === 'TEXT' && payload && String(chatId) !== String(config.MANAGER_TG_ID)) {
+        await notifyManager(chatId, payload);
+      }
+    } catch (err) {
+      console.error(`[telegram] stub error (${action}):`, err.message);
+    }
+    return;
+  }
+
   try {
     const result = flow.handleAction({ chatId, action, payload });
     if (userInfo) store.saveUserInfo(chatId, userInfo);
@@ -333,6 +370,8 @@ function start() {
     const chatId = String(ctx.chat.id);
     if (isAdmin(fromId) && !store.isInTestMode(chatId)) return;
     console.log(`[dispatch] chatId=${chatId} action=TRIAL_JOIN`);
+    // Акция закончилась, клуб бесплатный — эта кнопка ведёт туда же, куда всё остальное
+    if (config.CLUB_FREE_STUB) { await sendClubFreeStub(chatId); return; }
     try {
       store.saveUserInfo(chatId, { username: ctx.from.username, firstName: ctx.from.first_name });
       const result = await flow.handleTrialJoin({ chatId, createInvite: createClubInvite });

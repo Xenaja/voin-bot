@@ -28,7 +28,8 @@ function startScheduler(adapter) {
   // Дожимы ожидания оплаты (день 1/3/6 из REMINDER_HOURS) — ТОЛЬКО для AWAIT_PAYMENT_CLUB
   // (кто дошёл до оффера, но не оплатил). У каждого — кнопка оплаты (PAY_CLUB создаёт
   // свежую ссылку, если первая устарела).
-  setInterval(async () => {
+  // Пока клуб бесплатный — не догоняем людей просьбой оплатить то, что стало даром.
+  if (!config.CLUB_FREE_STUB) setInterval(async () => {
     const reminders = config.REMINDER_HOURS;
     for (let i = 0; i < reminders.length; i++) {
       const users = store.getPendingPaymentReminders(i, reminders[i]);
@@ -88,8 +89,9 @@ function startScheduler(adapter) {
     }, 10 * 1000);
   }
 
-  // Напоминания о продлении клуба + кик при истечении (каждый час, не ночью)
-  setInterval(async () => {
+  // Напоминания о продлении клуба + кик при истечении (каждый час, не ночью).
+  // Не запускается вовсе, пока клуб бесплатный: продлевать нечего, кикать некого.
+  if (config.CLUB_SUBSCRIPTION_ENABLED) setInterval(async () => {
     const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
     if (moscowHour >= 21 || moscowHour < 9) return;
 
@@ -167,7 +169,9 @@ function startScheduler(adapter) {
   // До закрытия окна — «последний созыв» в интервале TRIAL_REMIND_FROM..UNTIL (18:00–22:00 МСК,
   // reminder_count как флаг отправки). После закрытия — сообщение «вход закрыт» с кнопкой
   // обычной оплаты и перевод в AWAIT_PAYMENT_CLUB (дальше штатные дожимы день 1/3/6).
-  setInterval(async () => {
+  // Тоже выключено при бесплатном клубе: эта ветка после закрытия акции переводила
+  // зависших в «оплати 690 ₽».
+  if (!config.CLUB_FREE_STUB) setInterval(async () => {
     const now = new Date();
     if (now < new Date(config.TRIAL_END)) {
       if (now >= new Date(config.TRIAL_REMIND_FROM) && now < new Date(config.TRIAL_REMIND_UNTIL)) {
@@ -217,7 +221,7 @@ function startScheduler(adapter) {
   // YooKassa активирует «Автоплатежи» в кабинете). До этого тексты UX про автопродление
   // показываются, но списание не идёт — работает старый ручной ремайндер.
   // Запускается раз в час; берёт пользователей с истечением в ближайшие 12 часов.
-  if (config.AUTORENEW_ENABLED && config.YOOKASSA_SHOP_ID) {
+  if (config.CLUB_SUBSCRIPTION_ENABLED && config.AUTORENEW_ENABLED && config.YOOKASSA_SHOP_ID) {
     setInterval(async () => {
       const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
       if (moscowHour >= 21 || moscowHour < 9) return;
@@ -281,7 +285,15 @@ function startScheduler(adapter) {
     }, 60 * 60 * 1000);
     console.log('[scheduler] autorenew job enabled');
   } else {
-    console.log('[scheduler] autorenew DISABLED (AUTORENEW_ENABLED=false or no YOOKASSA_SHOP_ID)');
+    console.log('[scheduler] autorenew DISABLED'
+      + (config.CLUB_SUBSCRIPTION_ENABLED ? '' : ' (клуб бесплатный: CLUB_SUBSCRIPTION_ENABLED=false)'));
+  }
+
+  if (!config.CLUB_SUBSCRIPTION_ENABLED) {
+    console.log('[scheduler] клуб бесплатный: напоминания о продлении, кик из канала и списания выключены');
+  }
+  if (config.CLUB_FREE_STUB) {
+    console.log('[scheduler] заглушка включена: дожимы оплаты и trial-рассылка выключены');
   }
 
   console.log('[scheduler] started');
