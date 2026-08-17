@@ -102,12 +102,6 @@
       color: #0d0d0d;
     }
 
-    .btn-vk {
-      background-color: transparent;
-      color: #c9a84c;
-      border: 1.5px solid #c9a84c;
-    }
-
     .btn svg {
       width: 20px;
       height: 20px;
@@ -137,34 +131,87 @@
       font-size: 16px;
       line-height: 1.6;
       color: #d9d0c0;
-      margin-bottom: 16px;
+      margin-bottom: 24px;
     }
 
-    .card-number {
-      display: inline-block;
-      font-size: 22px;
+    .pay {
+      width: 100%;
+      margin-bottom: 24px;
+    }
+
+    .pay:last-child {
+      margin-bottom: 0;
+    }
+
+    .pay-title {
+      font-size: 13px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #8a8275;
+      margin-bottom: 12px;
+    }
+
+    .copy {
+      display: block;
+      width: 100%;
+      font-family: 'Arial', sans-serif;
+      font-size: 20px;
       font-weight: 600;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       color: #c9a84c;
       background: rgba(201, 168, 76, 0.08);
       border: 1px solid rgba(201, 168, 76, 0.3);
       border-radius: 6px;
-      padding: 12px 18px;
+      padding: 13px 12px;
+      margin-bottom: 8px;
       cursor: pointer;
       transition: background 0.2s;
     }
 
-    .card-number:hover {
+    .copy:hover {
       background: rgba(201, 168, 76, 0.15);
     }
 
-    .card-copied {
-      height: 16px;
-      margin-top: 8px;
-      font-size: 13px;
-      color: #c9a84c;
+    .copy:last-of-type {
+      margin-bottom: 0;
+    }
+
+    .copy small {
+      display: block;
+      font-size: 12px;
+      font-weight: 400;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8a8275;
+      margin-bottom: 4px;
+    }
+
+    .pay-note {
+      font-size: 14px;
+      line-height: 1.5;
+      color: #8a8275;
+      margin-top: 10px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translate(-50%, 10px);
+      background: #c9a84c;
+      color: #0d0d0d;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 6px;
       opacity: 0;
-      transition: opacity 0.2s;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
     }
   </style>
 </head>
@@ -179,11 +226,11 @@
     <div class="title">Код воина</div>
 
     <p class="text">
-      Переходи в мой закрытый клуб:
+      Переходи в мой клуб:
     </p>
 
     <div class="buttons">
-      <a id="tg-btn" href="https://t.me/VoinKodBot" class="btn btn-tg">
+      <a id="tg-btn" href="https://t.me/voinbotsman" class="btn btn-tg">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-2.044 9.63c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.17 14.31l-2.95-.924c-.64-.204-.657-.64.136-.95l11.57-4.461c.537-.194 1.006.131.968.246z"/>
         </svg>
@@ -192,35 +239,78 @@
     </div>
 
     <p class="fallback">
-      Если ссылка не открылась: <a href="https://t.me/VoinKodBot">@VoinKodBot</a>
+      Если ссылка не открылась: <a href="https://t.me/voinbotsman">@voinbotsman</a>
     </p>
 
     <div class="support">
       <p class="support-text">
-        Просто поддержать мою реабилитацию, блог и новые проекты можно здесь ⬇️
+        Мне очень хочется развивать блог и продолжать реабилитацию 💪<br>
+        Помочь мне можно донатом:
       </p>
-      <div class="card-number" onclick="copyCard()">2202 2085 8018 5388</div>
-      <div class="card-copied" id="copied">Скопировано</div>
+
+      <div class="pay">
+        <div class="pay-title">Сбер</div>
+        <button type="button" class="copy" data-copy="+79835556909">
+          <small>СБП</small>+7 983 555 69 09
+        </button>
+        <button type="button" class="copy" data-copy="2202208596023219">
+          <small>Карта</small>2202 2085 9602 3219
+        </button>
+        <p class="pay-note">Александр Б — с пометкой «на лечение»</p>
+      </div>
+
+      <div class="pay">
+        <div class="pay-title">Для иностранных платежей</div>
+        <button type="button" class="copy" data-copy="4400430356930625">
+          <small>Kaspi, Казахстан</small>4400 4303 5693 0625
+        </button>
+        <p class="pay-note">ALEXANDR BOTSMAN</p>
+      </div>
     </div>
 
   </div>
 
-  <script>
-    // Источник перехода: ?src=ig (Instagram), ?src=tt (TikTok), иначе — site.
-    // Метка уходит в Telegram как start-параметр и сохраняется в боте (поле source).
-    (function () {
-      var params = new URLSearchParams(window.location.search);
-      var src = (params.get('src') || 'site').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'site';
-      document.getElementById('tg-btn').href = 'https://t.me/VoinKodBot?start=' + src;
-    })();
+  <div class="toast" id="toast">Скопировано</div>
 
-    function copyCard() {
-      navigator.clipboard.writeText('2202208580185388').then(function () {
-        var el = document.getElementById('copied');
-        el.style.opacity = '1';
-        setTimeout(function () { el.style.opacity = '0'; }, 1500);
+  <script>
+    // Копирование реквизитов: значение берётся из data-copy.
+    (function () {
+      var toast = document.getElementById('toast');
+      var timer = null;
+
+      function showToast() {
+        toast.classList.add('show');
+        clearTimeout(timer);
+        timer = setTimeout(function () { toast.classList.remove('show'); }, 1500);
+      }
+
+      function fallbackCopy(value) {
+        var input = document.createElement('textarea');
+        input.value = value;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(input);
+      }
+
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest('[data-copy]');
+        if (!btn) return;
+        var value = btn.getAttribute('data-copy');
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(value).then(showToast, function () {
+            fallbackCopy(value);
+            showToast();
+          });
+        } else {
+          fallbackCopy(value);
+          showToast();
+        }
       });
-    }
+    })();
   </script>
 </body>
 </html>
