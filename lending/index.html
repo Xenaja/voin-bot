@@ -16,15 +16,16 @@
       color: #fff;
       font-family: 'Arial', sans-serif;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     .container {
-      max-width: 420px;
+      max-width: 400px;
       width: 100%;
-      padding: 40px 24px 48px;
+      padding: 20px 20px 24px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -32,13 +33,13 @@
     }
 
     .photo-wrap {
-      width: 220px;
-      height: 220px;
+      width: 116px;
+      height: 116px;
       border-radius: 50%;
       overflow: hidden;
       border: 2px solid #c9a84c;
-      box-shadow: 0 0 40px rgba(201, 168, 76, 0.25);
-      margin-bottom: 28px;
+      box-shadow: 0 0 26px rgba(201, 168, 76, 0.22);
+      margin-bottom: 14px;
     }
 
     .photo-wrap img {
@@ -49,33 +50,110 @@
     }
 
     .name {
-      font-size: 26px;
+      font-size: 22px;
       font-weight: 600;
       letter-spacing: 0.08em;
       color: #fff;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
     }
 
     .title {
-      font-size: 15px;
+      font-size: 12px;
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: #c9a84c;
-      margin-bottom: 32px;
     }
 
-    .text {
-      font-size: 19px;
-      line-height: 1.7;
+    /* Реквизиты — первый смысловой блок, до кнопок */
+    .support {
+      width: 100%;
+      margin-top: 18px;
+    }
+
+    .support-text {
+      font-size: 14px;
+      line-height: 1.5;
       color: #d9d0c0;
-      margin-bottom: 36px;
+      margin-bottom: 12px;
     }
 
-    .buttons {
+    .pay {
+      width: 100%;
+      text-align: left;
+    }
+
+    .pay + .pay {
+      margin-top: 12px;
+    }
+
+    .pay-title {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8a8275;
+      margin-bottom: 6px;
+    }
+
+    .pay-title b {
+      color: #c9a84c;
+      font-weight: 600;
+    }
+
+    .copy {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      font-family: 'Arial', sans-serif;
+      color: #c9a84c;
+      background: rgba(201, 168, 76, 0.08);
+      border: 1px solid rgba(201, 168, 76, 0.3);
+      border-radius: 6px;
+      padding: 9px 12px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.2s;
+    }
+
+    .copy + .copy {
+      margin-top: 6px;
+    }
+
+    .copy:hover {
+      background: rgba(201, 168, 76, 0.15);
+    }
+
+    .copy-label {
+      flex-shrink: 0;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #8a8275;
+    }
+
+    .copy-value {
+      flex: 1;
+      text-align: right;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+    }
+
+    .copy svg {
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+      opacity: 0.6;
+    }
+
+    .links {
+      width: 100%;
       display: flex;
       flex-direction: column;
-      gap: 14px;
-      width: 100%;
+      gap: 10px;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid rgba(201, 168, 76, 0.25);
     }
 
     .btn {
@@ -83,14 +161,14 @@
       align-items: center;
       justify-content: center;
       gap: 10px;
-      padding: 16px 24px;
+      padding: 13px 20px;
       border-radius: 6px;
-      font-size: 18px;
+      font-size: 16px;
       font-family: 'Arial', sans-serif;
       font-weight: 600;
       text-decoration: none;
       letter-spacing: 0.03em;
-      transition: opacity 0.2s;
+      transition: opacity 0.2s, background 0.2s;
     }
 
     .btn:hover {
@@ -102,95 +180,33 @@
       color: #0d0d0d;
     }
 
+    .btn-merch {
+      background: transparent;
+      color: #c9a84c;
+      border: 1px solid rgba(201, 168, 76, 0.5);
+    }
+
+    .btn-merch:hover {
+      background: rgba(201, 168, 76, 0.1);
+      opacity: 1;
+    }
+
     .btn svg {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       flex-shrink: 0;
     }
 
     .fallback {
-      font-size: 14px;
-      line-height: 1.5;
+      font-size: 12px;
+      line-height: 1.4;
       color: #8a8275;
-      margin-top: 16px;
+      margin-top: 12px;
     }
 
     .fallback a {
       color: #c9a84c;
       text-decoration: none;
-    }
-
-    .support {
-      width: 100%;
-      margin-top: 40px;
-      padding-top: 28px;
-      border-top: 1px solid rgba(201, 168, 76, 0.25);
-    }
-
-    .support-text {
-      font-size: 16px;
-      line-height: 1.6;
-      color: #d9d0c0;
-      margin-bottom: 24px;
-    }
-
-    .pay {
-      width: 100%;
-      margin-bottom: 24px;
-    }
-
-    .pay:last-child {
-      margin-bottom: 0;
-    }
-
-    .pay-title {
-      font-size: 13px;
-      letter-spacing: 0.16em;
-      text-transform: uppercase;
-      color: #8a8275;
-      margin-bottom: 12px;
-    }
-
-    .copy {
-      display: block;
-      width: 100%;
-      font-family: 'Arial', sans-serif;
-      font-size: 20px;
-      font-weight: 600;
-      letter-spacing: 0.06em;
-      color: #c9a84c;
-      background: rgba(201, 168, 76, 0.08);
-      border: 1px solid rgba(201, 168, 76, 0.3);
-      border-radius: 6px;
-      padding: 13px 12px;
-      margin-bottom: 8px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .copy:hover {
-      background: rgba(201, 168, 76, 0.15);
-    }
-
-    .copy:last-of-type {
-      margin-bottom: 0;
-    }
-
-    .copy small {
-      display: block;
-      font-size: 12px;
-      font-weight: 400;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: #8a8275;
-      margin-bottom: 4px;
-    }
-
-    .pay-note {
-      font-size: 14px;
-      line-height: 1.5;
-      color: #8a8275;
-      margin-top: 10px;
     }
 
     .toast {
@@ -213,6 +229,36 @@
       opacity: 1;
       transform: translate(-50%, 0);
     }
+
+    /* Низкие экраны: ужимаем ещё, чтобы всё осталось в один экран */
+    @media (max-height: 700px) {
+      .photo-wrap {
+        width: 88px;
+        height: 88px;
+        margin-bottom: 10px;
+      }
+
+      .name {
+        font-size: 20px;
+      }
+
+      .support {
+        margin-top: 14px;
+      }
+
+      .support-text {
+        margin-bottom: 10px;
+      }
+
+      .links {
+        margin-top: 14px;
+        padding-top: 14px;
+      }
+
+      .btn {
+        padding: 11px 20px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -225,48 +271,65 @@
     <div class="name">Саша Боцман</div>
     <div class="title">Код воина</div>
 
-    <p class="text">
-      Переходи в мой клуб:
-    </p>
+    <div class="support">
+      <p class="support-text">
+        Развиваю блог и продолжаю реабилитацию 💪<br>
+        Поддержать можно донатом:
+      </p>
 
-    <div class="buttons">
+      <div class="pay">
+        <div class="pay-title"><b>Сбер</b> · Александр Б, пометка «на лечение»</div>
+        <button type="button" class="copy" data-copy="+79835556909">
+          <span class="copy-label">СБП</span>
+          <span class="copy-value">+7 983 555 69 09</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="12" height="12" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+        <button type="button" class="copy" data-copy="2202208596023219">
+          <span class="copy-label">Карта</span>
+          <span class="copy-value">2202 2085 9602 3219</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="12" height="12" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="pay">
+        <div class="pay-title"><b>Kaspi, Казахстан</b> · ALEXANDR BOTSMAN</div>
+        <button type="button" class="copy" data-copy="4400430356930625">
+          <span class="copy-label">Карта</span>
+          <span class="copy-value">4400 4303 5693 0625</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="12" height="12" rx="2"/>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="links">
       <a id="tg-btn" href="https://t.me/voinbotsman" class="btn btn-tg">
         <svg viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-2.044 9.63c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.17 14.31l-2.95-.924c-.64-.204-.657-.64.136-.95l11.57-4.461c.537-.194 1.006.131.968.246z"/>
         </svg>
-        Telegram
+        Мой клуб в Telegram
+      </a>
+
+      <a href="https://voblago.com/collaborations/voin" class="btn btn-merch" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        Мерч-послание
       </a>
     </div>
 
     <p class="fallback">
       Если ссылка не открылась: <a href="https://t.me/voinbotsman">@voinbotsman</a>
     </p>
-
-    <div class="support">
-      <p class="support-text">
-        Мне очень хочется развивать блог и продолжать реабилитацию 💪<br>
-        Помочь мне можно донатом:
-      </p>
-
-      <div class="pay">
-        <div class="pay-title">Сбер</div>
-        <button type="button" class="copy" data-copy="+79835556909">
-          <small>СБП</small>+7 983 555 69 09
-        </button>
-        <button type="button" class="copy" data-copy="2202208596023219">
-          <small>Карта</small>2202 2085 9602 3219
-        </button>
-        <p class="pay-note">Александр Б — с пометкой «на лечение»</p>
-      </div>
-
-      <div class="pay">
-        <div class="pay-title">Для иностранных платежей</div>
-        <button type="button" class="copy" data-copy="4400430356930625">
-          <small>Kaspi, Казахстан</small>4400 4303 5693 0625
-        </button>
-        <p class="pay-note">ALEXANDR BOTSMAN</p>
-      </div>
-    </div>
 
   </div>
 
