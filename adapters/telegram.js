@@ -41,7 +41,12 @@ async function send(chatId, result) {
         console.error(`[telegram] banner send failed (continuing): ${err.message}`);
       }
     }
-    if (msg.button) {
+    if (msg.urlButton) {
+      const keyboard = Markup.inlineKeyboard([
+        Markup.button.url(msg.urlButton.label, msg.urlButton.url),
+      ]);
+      await bot.telegram.sendMessage(chatId, msg.text, { ...keyboard, link_preview_options: { is_disabled: true } });
+    } else if (msg.button) {
       const keyboard = Markup.inlineKeyboard([
         Markup.button.callback(msg.button.label, msg.button.callback),
       ]);

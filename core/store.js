@@ -26,6 +26,18 @@ db.exec(`
   )
 `);
 
+// Ре-активационная рассылка покупателям «Кода Воина» (только Telegram).
+// step = сколько сообщений уже отправлено (0..5). paid=1 — оплатил клуб в v2, дожимы стоп.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS reactivation (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id    TEXT NOT NULL UNIQUE,
+    step       INTEGER DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    paid       INTEGER DEFAULT 0
+  )
+`);
+
 function getUser(platform, chatId) {
   const stmt = db.prepare('SELECT * FROM users WHERE platform = ? AND chat_id = ?');
   return stmt.get(platform, String(chatId)) || null;
@@ -96,6 +108,44 @@ function getAllAdminSettings() {
   return db.prepare('SELECT * FROM admin_settings').all();
 }
 
+// ── Ре-активационная рассылка ─────────────────────────────────────────────
+
+// Шаги для рассылки, у которых прошло достаточно времени с прошлого сообщения.
+// Ночью (21:00–09:00 МСК) не шлём. hours=0 → готово сразу (для первого сообщения).
+function getDueReactivation(step, hours) {
+  const moscowHour = new Date(Date.now() + 3 * 60 * 60 * 1000).getUTCHours();
+  if (moscowHour >= 21 || moscowHour < 9) return [];
+  return db.prepare(`
+    SELECT * FROM reactivation
+    WHERE paid = 0 AND step = ?
+      AND updated_at < datetime('now', '-${Math.floor(hours)} hours')
+  `).all(step);
+}
+
+function advanceReactivation(chatId) {
+  db.prepare(`UPDATE reactivation SET step = step + 1, updated_at = datetime('now') WHERE chat_id = ?`)
+    .run(String(chatId));
+}
+
+function markReactivationPaid(chatId) {
+  db.prepare(`UPDATE reactivation SET paid = 1 WHERE chat_id = ?`).run(String(chatId));
+}
+
+// Read-only проверка: оплатил ли этот TG-id клуб в боте v2 (у TG id общий для обоих ботов).
+// Если БД v2 недоступна — возвращаем false (рассылку не блокируем).
+const V2_DB_PATH = process.env.V2_DB_PATH || path.join(__dirname, '../../voin-bot-v2/data/users.db');
+let v2db = null;
+function isClubMemberInV2(chatId) {
+  try {
+    if (!v2db) v2db = new DatabaseSync(V2_DB_PATH, { readOnly: true });
+    const row = v2db.prepare("SELECT 1 FROM users WHERE chat_id = ? AND state = 'COMPLETED_CLUB'")
+      .get(String(chatId));
+    return !!row;
+  } catch (err) {
+    return false;
+  }
+}
+
 module.exports = {
   getUser,
   upsertUser,
@@ -104,4 +154,8 @@ module.exports = {
   incrementReminderCount,
   isInTestMode,
   setTestMode,
+  getDueReactivation,
+  advanceReactivation,
+  markReactivationPaid,
+  isClubMemberInV2,
 };

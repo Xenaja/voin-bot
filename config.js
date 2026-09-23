@@ -30,6 +30,12 @@ module.exports = {
   AUTO_PROGRESS_MINUTES: 30,
   REMINDER_HOURS:        24,
 
+  // Ре-активация покупателей «Кода Воина» → клуб в боте v2.
+  // Кнопка оффера ведёт в @VoinKodBot с deep-link ?start=reactivate.
+  REACTIVATE_BOT_LINK: 'https://t.me/VoinKodBot?start=reactivate',
+  // Часы ожидания перед каждым шагом (от прошлого сообщения): день 0/1/2/5/9.
+  REACTIVATE_DELAYS_H: [0, 24, 24, 72, 96],
+
   BANNERS: {
     msg1: './visual/1.jpg',
     msg2: './visual/2.jpg',
