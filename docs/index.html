@@ -64,10 +64,15 @@
       color: #c9a84c;
     }
 
-    /* Реквизиты — первый смысловой блок, до кнопок */
+    /* Мерч — первый смысловой блок, до реквизитов */
+    .merch {
+      width: 100%;
+      margin-top: 28px;
+    }
+
     .support {
       width: 100%;
-      margin-top: 32px;
+      margin-top: 28px;
     }
 
     .support-text {
@@ -180,15 +185,30 @@
       color: #0d0d0d;
     }
 
+    /* Мерч выделяем ярко — сплошное золото, как кнопка клуба */
     .btn-merch {
-      background: transparent;
-      color: #c9a84c;
-      border: 1px solid rgba(201, 168, 76, 0.5);
+      background-color: #c9a84c;
+      color: #0d0d0d;
+      box-shadow: 0 0 22px rgba(201, 168, 76, 0.28);
     }
 
-    .btn-merch:hover {
-      background: rgba(201, 168, 76, 0.1);
-      opacity: 1;
+    .btn-merch-label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: rgba(13, 13, 13, 0.62);
+      margin-bottom: 2px;
+    }
+
+    .btn-merch-title {
+      display: block;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      white-space: nowrap;
     }
 
     .btn svg {
@@ -251,8 +271,12 @@
         padding-bottom: 28px;
       }
 
+      .merch {
+        margin-top: 20px;
+      }
+
       .support {
-        margin-top: 22px;
+        margin-top: 20px;
       }
 
       .support-text {
@@ -279,6 +303,19 @@
 
     <div class="name">Саша Боцман</div>
     <div class="title">Код воина</div>
+
+    <div class="merch">
+      <a href="https://voblago.com/collaborations/voin" class="btn btn-merch" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
+          <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
+        </svg>
+        <span>
+          <span class="btn-merch-label">Футболка</span>
+          <span class="btn-merch-title">«Временные трудности»</span>
+        </span>
+      </a>
+    </div>
 
     <div class="support">
       <p class="support-text">
@@ -325,14 +362,6 @@
           <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.894 8.221l-2.044 9.63c-.145.658-.537.818-1.084.508l-3-2.21-1.447 1.394c-.16.16-.295.295-.605.295l.213-3.053 5.56-5.023c.242-.213-.054-.333-.373-.12L7.17 14.31l-2.95-.924c-.64-.204-.657-.64.136-.95l11.57-4.461c.537-.194 1.006.131.968.246z"/>
         </svg>
         Мой клуб в Telegram
-      </a>
-
-      <a href="https://voblago.com/collaborations/voin" class="btn btn-merch" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
-          <path d="M3 6h18M16 10a4 4 0 0 1-8 0"/>
-        </svg>
-        Мерч-послание
       </a>
     </div>
 
