@@ -75,7 +75,16 @@
       font-size: 14px;
       line-height: 1.5;
       color: #d9d0c0;
-      margin-bottom: 12px;
+      margin-bottom: 8px;
+    }
+
+    /* Стрелка ведёт взгляд от подписи к кнопке */
+    .merch-arrow {
+      display: block;
+      width: 18px;
+      height: 18px;
+      margin: 0 auto 8px;
+      color: rgba(201, 168, 76, 0.55);
     }
 
     .support {
@@ -270,7 +279,12 @@
       }
 
       .merch-label {
-        margin-bottom: 10px;
+        margin-bottom: 6px;
+      }
+
+      .merch-arrow {
+        height: 14px;
+        margin-bottom: 6px;
       }
 
       .support-text {
@@ -299,7 +313,10 @@
     <div class="title">Код воина</div>
 
     <div class="merch">
-      <div class="merch-label">Вдохновляющий мерч — футболка с посланием:</div>
+      <div class="merch-label">Вдохновляющий мерч – футболка с посланием</div>
+      <svg class="merch-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 5v13M6 13l6 6 6-6"/>
+      </svg>
       <a href="https://voblago.com/collaborations/voin" class="btn btn-merch" target="_blank" rel="noopener">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/>
