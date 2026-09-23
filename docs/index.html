@@ -198,9 +198,16 @@
       opacity: 0.85;
     }
 
+    /* Клуб — второстепенное действие: обводка, яркая заливка только у мерча */
     .btn-tg {
-      background-color: #c9a84c;
-      color: #0d0d0d;
+      background: transparent;
+      color: #c9a84c;
+      border: 1px solid rgba(201, 168, 76, 0.5);
+    }
+
+    .btn-tg:hover {
+      background: rgba(201, 168, 76, 0.1);
+      opacity: 1;
     }
 
     /* Мерч выделяем ярко — сплошное золото, как кнопка клуба */
