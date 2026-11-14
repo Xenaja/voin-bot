@@ -32,7 +32,7 @@ module.exports = {
 
   // Картинка над оффером. Новая — положить по этому пути (или GUIDE_BANNER в .env)
   // и удалить её ключ banner_* из data/tg_file_ids.json.
-  GUIDE_BANNER: process.env.GUIDE_BANNER || './visual/kod-voina.jpg',
+  GUIDE_BANNER: process.env.GUIDE_BANNER || './visual/kod-voina-cover.png', // обложка от Алины, 14.11.2026
 
   // Мотивационные напоминания: часы после оффера (день 1/3/6), только 9:00–21:00 МСК
   MOTIVATION_HOURS: [24, 72, 144],
