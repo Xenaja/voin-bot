@@ -9,7 +9,7 @@ module.exports = {
   // ЮKassa. Единственный продукт — гайд «Код Воина», разовый платёж.
   YOOKASSA_SHOP_ID: process.env.YOOKASSA_SHOP_ID || '',
   YOOKASSA_SECRET_KEY: process.env.YOOKASSA_SECRET_KEY || '',
-  YOOKASSA_AMOUNT_GUIDE: 490,
+  YOOKASSA_AMOUNT_GUIDE: 690,
   // Тест без ЮKassa: кнопка «Купить» у админов сразу выдаёт PDF. Работает, только пока
   // YOOKASSA_SHOP_ID пуст; с ключами отключается сама. Обычным людям — никогда.
   PAYMENT_STUB: process.env.PAYMENT_STUB === 'true',

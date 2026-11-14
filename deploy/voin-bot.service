@@ -1,5 +1,5 @@
 [Unit]
-Description=Бот «Код Воина» (гайд 490 ₽)
+Description=Бот «Код Воина» (гайд 690 ₽)
 After=network-online.target fiproxy-tunnel.service
 Wants=network-online.target
 

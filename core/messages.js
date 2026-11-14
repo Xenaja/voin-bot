@@ -1,9 +1,9 @@
-// Все тексты бота «Код Воина». С 11.2026 единственный продукт — гайд «Код Воина» за 490 ₽
+// Все тексты бота «Код Воина». С 11.2026 единственный продукт — гайд «Код Воина» за 690 ₽
 // (клуб «Первый шаг» из бота убран по ТЗ Алины Рафалес от 10.11.2026).
 
 const OFERTA_URL = 'https://docs.google.com/document/d/1ER2N6yuLuMsZBAb1S6ww5E-4T4CikbZvjxUxK-lHCCQ';
 const POLICY_URL = 'https://docs.google.com/document/d/1fRv1d2pykL1pzUe2BSQVJqyc9qw4rJOPou6CJUoDvbU';
-const PRICE = 490;
+const PRICE = 690;
 
 // ──────────────────────────────────────────────
 // Экран 1 — приветствие + согласие (без изменений по ТЗ)
