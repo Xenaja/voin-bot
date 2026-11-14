@@ -4,64 +4,27 @@ const config = require('../config');
 
 const BASE_URL = 'https://api.yookassa.ru/v3';
 
-function auth() {
-  return {
-    username: config.YOOKASSA_SHOP_ID,
-    password: config.YOOKASSA_SECRET_KEY,
-  };
-}
+const auth = () => ({ username: config.YOOKASSA_SHOP_ID, password: config.YOOKASSA_SECRET_KEY });
 
-// Первый платёж пользователя. Для club/bundle передаём savePaymentMethod=true,
-// чтобы YooKassa сохранила метод оплаты для последующих off-session списаний.
-// Флаг save_payment_method работает только если в кабинете YooKassa подключены «Автоплатежи».
-async function createPayment(chatId, amount = 990, options = {}) {
-  const { savePaymentMethod = false, description } = options;
-  const idempotenceKey = uuidv4();
-  const body = {
+// Разовый платёж за гайд. Ответ — объект платежа, ссылка в confirmation.confirmation_url.
+async function createPayment(chatId, amount) {
+  const response = await axios.post(`${BASE_URL}/payments`, {
     amount: { value: amount.toFixed(2), currency: 'RUB' },
-    confirmation: { type: 'redirect', return_url: 'https://t.me/VoinKodBot' },
+    confirmation: { type: 'redirect', return_url: config.YOOKASSA_RETURN_URL },
     capture: true,
-    description: description || `Код Воина — пользователь ${chatId}`,
-    metadata: { chat_id: String(chatId) },
-  };
-  if (savePaymentMethod) body.save_payment_method = true;
-
-  const response = await axios.post(`${BASE_URL}/payments`, body, {
+    description: `Гайд «Код Воина» — пользователь ${chatId}`,
+    metadata: { chat_id: String(chatId), product: 'guide' },
+  }, {
     auth: auth(),
-    headers: { 'Idempotence-Key': idempotenceKey },
+    headers: { 'Idempotence-Key': uuidv4() },
+    timeout: 15000,
   });
   return response.data;
 }
 
-// Off-session списание по сохранённому методу (recurrent). Требует подключённых
-// «Автоплатежей» в кабинете YooKassa. Возвращает payment object — обычно сразу
-// status='succeeded' либо 'canceled'.
-//
-// idempotenceKey ОБЯЗАТЕЛЬНО передавать детерминированным (renew-<chatId>-<expiry>):
-// если списание прошло, а мы не успели продлить срок в БД (падение процесса, обрыв сети),
-// следующий прогон cron'а с тем же ключом получит от ЮКассы ТОТ ЖЕ платёж, а не спишет
-// деньги второй раз. С случайным ключом это был бы двойной платёж.
-async function chargeSaved(paymentMethodId, amount, chatId, description, idempotenceKey = uuidv4()) {
-  const response = await axios.post(
-    `${BASE_URL}/payments`,
-    {
-      amount: { value: amount.toFixed(2), currency: 'RUB' },
-      capture: true,
-      payment_method_id: paymentMethodId,
-      description: description || `Продление клуба «Первый шаг» — ${chatId}`,
-      metadata: { chat_id: String(chatId), renewal: 'true' },
-    },
-    {
-      auth: auth(),
-      headers: { 'Idempotence-Key': idempotenceKey },
-    }
-  );
-  return response.data;
-}
-
 async function getPayment(paymentId) {
-  const response = await axios.get(`${BASE_URL}/payments/${paymentId}`, { auth: auth() });
+  const response = await axios.get(`${BASE_URL}/payments/${paymentId}`, { auth: auth(), timeout: 15000 });
   return response.data;
 }
 
-module.exports = { createPayment, chargeSaved, getPayment };
+module.exports = { createPayment, getPayment };

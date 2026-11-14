@@ -1,79 +1,45 @@
 const store = require('./store');
 const m = require('./messages');
 const config = require('../config');
-const yookassa = require('./yookassa');
 
-// Единственный продукт — клуб «Первый шаг», подписка с автопродлением.
-// AWAIT_STATES/COMPLETED_STATES оставлены как маппинг, чтобы legacy-пользователи
-// в COMPLETED_GUIDE/COMPLETED_BUNDLE (из старых заказов) корректно обрабатывались
-// поисковыми запросами в store.js — туда они зашиты текстом.
-const AMOUNTS = { club: config.YOOKASSA_AMOUNT_CLUB };
-const AWAIT_STATES = { club: 'AWAIT_PAYMENT_CLUB' };
-const COMPLETED_STATES = { club: 'COMPLETED_CLUB' };
+// Путь (ТЗ 10.11.2026): /start → приветствие + согласие → «Начать» → картинка + оффер гайда
+// с кнопкой оплаты → ЮKassa → автоматическая выдача PDF.
+//
+// Состояния: CONSENT_SENT → AWAIT_PAYMENT_GUIDE → COMPLETED_GUIDE.
+// Результат handleAction — { messages, createPayment?, files?, notifyManager?, originalText? }.
+// createPayment: адаптер создаёт платёж ЮKassa и вешает кнопку оплаты на последнее сообщение.
 
-// Окно акции «бесплатный месяц» закрыто?
-const trialClosed = () => new Date() >= new Date(config.TRIAL_END);
-
-// Действия управления подпиской, доступные ДЕЙСТВУЮЩЕМУ участнику клуба (COMPLETED_*):
-// продление, отписка. Раньше гард «уже в клубе» глотал их первым — участник, нажавший
-// «Продлить за 690 ₽» или /unsubscribe, получал «Ты уже в клубе» вместо действия.
-const CLUB_MANAGE_ACTIONS = new Set(['BTN_RENEW_CLUB', 'BTN_CLUB_CANCEL', 'UNSUBSCRIBE']);
+function buyButton(label = m.BTN_BUY) {
+  return { label, callback: 'buy_guide' };
+}
 
 function handleAction({ chatId, action, payload }) {
   const user = store.getUser(chatId);
   const state = user ? user.state : null;
+  const paid = state && state.startsWith('COMPLETED_');
 
-  // Уже завершили — отвечаем стандартно (кроме действий управления подпиской)
-  if (state && state.startsWith('COMPLETED_') && !CLUB_MANAGE_ACTIONS.has(action)) {
-    return { messages: [{ text: m.FALLBACK_COMPLETED }] };
+  // Купившему повторно не продаём: на /start, кнопки и текст — экран «гайд уже у тебя»
+  if (paid) {
+    if (action === 'RESEND_GUIDE') {
+      return { messages: [], files: ['guide'] };
+    }
+    if (action === 'TEXT') {
+      return {
+        messages: [{ text: m.FALLBACK_COMPLETED, button: { label: m.BTN_RESEND, callback: 'resend_guide' } }],
+        notifyManager: true, originalText: payload,
+      };
+    }
+    if (action === 'START' || action === 'BTN_CONSENT' || action === 'BUY') {
+      return { messages: [{ text: m.FALLBACK_COMPLETED, button: { label: m.BTN_RESEND, callback: 'resend_guide' } }] };
+    }
+    return { messages: [] };
   }
 
-  // /start — показываем согласие
+  // /start — приветствие и согласие
   if (action === 'START') {
     store.upsertUser(chatId, 'CONSENT_SENT');
     store.setStartedAt(chatId, payload);
-    store.setOptOut(chatId, false); // вернулся по /start — снова подписан на рассылки
-
-    // Deep-link акции «бесплатный месяц» (сторис 06.08). Не общая воронка: оффер бесплатного
-    // входа с кнопкой (кнопка = согласие с офертой, ссылка на согласие в тексте). После
-    // закрытия окна тот же диплинк отвечает «вход закрыт» + обычная оплата.
-    if (payload === config.TRIAL_SOURCE) {
-      if (trialClosed()) {
-        store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-        store.saveProductType(chatId, 'club');
-        return {
-          messages: [{
-            text: m.MSG_TRIAL_CLOSED,
-            parseMode: 'HTML',
-            button: { label: m.BTN_TRIAL_CLOSED_PAY, callback: 'pay_club' },
-          }],
-        };
-      }
-      store.upsertUser(chatId, 'TRIAL_OFFER_SENT');
-      return {
-        messages: [{
-          text: m.MSG_TRIAL_OFFER,
-          parseMode: 'HTML',
-          button: { label: m.BTN_TRIAL_JOIN, callback: 'trial_join' },
-        }],
-      };
-    }
-
-    // Deep-link из старого бота: покупатель «Кода Воина» → сразу оффер клуба С кнопкой оплаты
-    // в одном сообщении (createPayment вешает urlButton на MSG_REACTIVATE). Не общая воронка.
-    // source='reactivate' сохранён setStartedAt → исключит из клубных дожимов v2 (их шлёт v1).
-    if (payload === 'reactivate') {
-      store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-      store.saveProductType(chatId, 'club');
-      return {
-        messages: [{
-          text: m.MSG_REACTIVATE,
-          parseMode: 'HTML',
-        }],
-        createPayment: 'club',
-      };
-    }
-
+    store.setOptOut(chatId, false); // вернулся по /start — снова получает напоминания
     return {
       messages: [{
         text: m.MSG_CONSENT,
@@ -83,133 +49,51 @@ function handleAction({ chatId, action, payload }) {
     };
   }
 
-  // Согласие → авто-цепочка знакомства: [Начать] →(3с)→ Шаг 2 →(5с)→ Шаг 3.
-  // Приветствие (бывший Шаг 1) показано уже на экране согласия. Два сообщения уходят
-  // пачкой; delayBefore заставляет адаптер выждать паузу перед каждым (точные задержки,
-  // не через планировщик). Шаг 3 — с кнопкой «Расскажи про клуб». Состояние INTRO_SENT.
+  // «Начать» → картинка «Код Воина» + оффер; кнопка оплаты — сразу под оффером
   if (action === 'BTN_CONSENT') {
     if (state !== 'CONSENT_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'INTRO_SENT');
+    store.upsertUser(chatId, 'AWAIT_PAYMENT_GUIDE');
+    store.saveProductType(chatId, 'guide');
+    store.markOffered(chatId);
     return {
-      messages: [
-        { text: m.MSG_STEP2, delayBefore: config.INTRO_DELAYS[0] },
-        { text: m.MSG_STEP3, delayBefore: config.INTRO_DELAYS[1], button: { label: m.BTN_ABOUT, callback: 'about' } },
-      ],
+      messages: [{ banner: config.GUIDE_BANNER, text: m.MSG_GUIDE_OFFER }],
+      createPayment: { product: 'guide', label: m.BTN_BUY },
     };
   }
 
-  // Шаг 3 → Шаг 4: кнопка «Расскажи про клуб» показывает, что внутри клуба.
-  if (action === 'BTN_ABOUT') {
-    if (state !== 'INTRO_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'ABOUT_SENT');
+  // Кнопка покупки из напоминания / «попробовать ещё раз» — всегда свежая ссылка
+  if (action === 'BUY') {
+    if (state !== 'AWAIT_PAYMENT_GUIDE' && state !== 'CONSENT_SENT') return { messages: [] };
+    if (state === 'CONSENT_SENT') {
+      store.upsertUser(chatId, 'AWAIT_PAYMENT_GUIDE');
+      store.saveProductType(chatId, 'guide');
+      store.markOffered(chatId);
+    }
     return {
-      messages: [{
-        text: m.MSG_STEP4,
-        button: { label: m.BTN_WANT, callback: 'want' },
-      }],
+      messages: [{ text: m.MSG_PAY_LINK }],
+      createPayment: { product: 'guide', label: m.BTN_BUY },
     };
   }
 
-  // Шаг 4 → Шаг 5: оффер СРАЗУ со ссылкой на оплату — одно сообщение.
-  // Платёж YooKassa создаётся здесь же (createPayment), кнопка «Оплатить» встаёт прямо
-  // под текстом оффера. Пользователь сразу в AWAIT_PAYMENT_CLUB — дожимы про оплату
-  // работают ТОЛЬКО на этом стейте. upsertUser сбрасывает reminder_count в 0 (дожимы с нуля).
-  if (action === 'BTN_WANT') {
-    if (state !== 'ABOUT_SENT') return { messages: [] };
-    store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-    store.saveProductType(chatId, 'club');
-    return {
-      messages: [{
-        text: m.MSG_OFFER,
-        parseMode: 'HTML',
-      }],
-      createPayment: 'club',
-    };
-  }
-
-  // Подтверждение оплаты клуба — доступно из OFFER_SENT и AWAIT_PAYMENT_CLUB (если передумал)
-  if (action === 'PAY_CLUB') {
-    const canPay = state === 'OFFER_SENT' || state === 'AWAIT_PAYMENT_CLUB';
-    if (!canPay) return { messages: [] };
-    store.upsertUser(chatId, AWAIT_STATES.club);
-    store.saveProductType(chatId, 'club');
-    return {
-      messages: [],
-      createPayment: 'club',
-    };
-  }
-
-  // Дожимы ожидания оплаты (scheduler): день 1/3/6, только на AWAIT_PAYMENT_CLUB.
-  // Каждый с кнопкой оплаты — по клику PAY_CLUB создаёт СВЕЖУЮ ссылку.
-  if (action === 'REMINDER_PAYMENT') {
-    if (!state || !state.startsWith('AWAIT_PAYMENT_')) return { messages: [] };
+  // Мотивационное напоминание (scheduler). payload = индекс в MOTIVATION.
+  if (action === 'MOTIVATION') {
     const idx = typeof payload === 'number' ? payload : 0;
-    const text = m.OFFER_REMINDERS[idx] || m.OFFER_REMINDERS[m.OFFER_REMINDERS.length - 1];
-    return {
-      messages: [{
-        text,
-        button: { label: m.BTN_ENTER_CLUB, callback: 'pay_club' },
-      }],
-    };
+    const text = m.MOTIVATION[idx] || m.MOTIVATION[m.MOTIVATION.length - 1];
+    return { messages: [{ text, button: buyButton() }] };
   }
 
-  // Отказ от автопродления клуба (кнопка в ремайндере или команда /unsubscribe).
-  // setAutoRenew(false) сбрасывает и auto_renew=0, и club_cancel=1 — старый ремайндер
-  // тоже не побеспокоит. Доступ сохраняется до club_expires_at, кикер уберёт по истечении.
-  if (action === 'BTN_CLUB_CANCEL' || action === 'UNSUBSCRIBE') {
-    const fresh = store.getUser(chatId);
-    // /unsubscribe без активной подписки — мягкий ответ
-    if (!fresh || !fresh.club_expires_at || (fresh.state !== 'COMPLETED_CLUB' && fresh.state !== 'COMPLETED_BUNDLE')) {
-      return { messages: [{ text: m.MSG_UNSUBSCRIBE_NOOP }] };
-    }
-    store.setAutoRenew(chatId, false);
-    return {
-      messages: [{ text: m.MSG_CLUB_CANCEL_CONFIRM(fresh.club_expires_at) }],
-    };
-  }
-
-  // Ручное продление клуба (BTN_RENEW_CLUB или BTN_RESUME_CLUB).
-  // Действующий (или кикнутый — стейт тот же) участник ОСТАЁТСЯ в COMPLETED_*: если уронить
-  // его в AWAIT_PAYMENT, он выпадает из кикера/ремайндеров и попадает в воронку дожимов.
-  // Его платёж ловит getPendingPayments (расширен на COMPLETED_CLUB/BUNDLE по payment_id).
-  if (action === 'BTN_RENEW_CLUB') {
-    if (state !== 'COMPLETED_CLUB' && state !== 'COMPLETED_BUNDLE') {
-      store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-    }
-    store.saveProductType(chatId, 'club');
-    return {
-      messages: [],
-      createPayment: 'club',
-    };
-  }
-
-  // Текстовые сообщения от пользователя
+  // Текст от пользователя
   if (action === 'TEXT') {
-    // Уведомить менеджера о сообщениях вне сценария
-    if (state && state.startsWith('COMPLETED_')) {
-      return { messages: [{ text: m.FALLBACK_COMPLETED }], notifyManager: true, originalText: payload };
-    }
-    if (state && state.startsWith('AWAIT_PAYMENT_')) {
-      return { messages: [{ text: m.FALLBACK_AWAIT_PAYMENT }], notifyManager: true, originalText: payload };
-    }
-    if (state === 'INTRO_SENT') {
-      return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_ABOUT, callback: 'about' } }] };
-    }
-    if (state === 'ABOUT_SENT') {
-      return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_WANT, callback: 'want' } }] };
-    }
-    if (state === 'TRIAL_OFFER_SENT') {
-      if (!trialClosed()) {
-        return { messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_TRIAL_JOIN, callback: 'trial_join' } }] };
-      }
-      store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-      store.saveProductType(chatId, 'club');
+    if (state === 'AWAIT_PAYMENT_GUIDE') {
       return {
-        messages: [{
-          text: m.MSG_TRIAL_CLOSED,
-          parseMode: 'HTML',
-          button: { label: m.BTN_TRIAL_CLOSED_PAY, callback: 'pay_club' },
-        }],
+        messages: [{ text: m.FALLBACK_AWAIT_PAYMENT, button: buyButton() }],
+        notifyManager: true, originalText: payload,
+      };
+    }
+    if (state === 'CONSENT_SENT') {
+      return {
+        messages: [{ text: m.FALLBACK_PRESS_BUTTON, button: { label: m.BTN_CONSENT, callback: 'consent' } }],
+        notifyManager: true, originalText: payload,
       };
     }
     return { messages: [{ text: m.FALLBACK_IDLE }], notifyManager: true, originalText: payload };
@@ -218,64 +102,17 @@ function handleAction({ chatId, action, payload }) {
   return { messages: [] };
 }
 
-// Вызывается после успешного платежа ЮКассой.
-// paymentMethodId — id сохранённой карты, передаётся scheduler'ом если save_payment_method=true.
-// extendClubExpiry вместо перезаписи: продление до истечения не сжигает оставшиеся дни,
-// заодно сбрасывает club_reminder_count (иначе следующий цикл ремайндеров не запустится).
-async function handlePaymentSuccess({ chatId, product, createInvite, paymentMethodId }) {
-  store.upsertUser(chatId, 'COMPLETED_CLUB');
+// Успешная оплата (вызывает поллер ЮKassa): статус, текст благодарности и PDF
+function handlePaymentSuccess({ chatId }) {
+  store.upsertUser(chatId, 'COMPLETED_GUIDE');
+  store.saveProductType(chatId, 'guide');
   store.setCompletedAt(chatId);
-
-  const expires = store.extendClubExpiry(chatId, config.CLUB_ACCESS_DAYS);
-  store.setAutoRenew(chatId, true);
-  store.setTrial(chatId, false); // оплатил — больше не триальщик
-  if (paymentMethodId) store.savePaymentMethodId(chatId, paymentMethodId);
-
-  const inviteUrl = await createInvite(chatId);
-  return {
-    messages: [{ text: m.MSG_COMPLETED_CLUB(inviteUrl, expires) }],
-  };
+  return { messages: [{ text: m.MSG_PAID }], files: ['guide'] };
 }
 
-// Кнопка «Войти в клуб бесплатно» (акция 06.08): доступ сразу, без оплаты и карты.
-// Механика дальше штатная: club_expires_at через 30 дней, у триальщика нет payment_method_id →
-// придут trial-ремайндеры с кнопкой оплаты; не оплатил → кик. Оплатил картой → автопродление.
-async function handleTrialJoin({ chatId, createInvite }) {
-  const user = store.getUser(chatId);
-  const state = user ? user.state : null;
-
-  if (state && state.startsWith('COMPLETED_')) {
-    return { messages: [{ text: m.FALLBACK_COMPLETED }] };
-  }
-  if (state !== 'TRIAL_OFFER_SENT') return { messages: [] };
-
-  if (trialClosed()) {
-    store.upsertUser(chatId, 'AWAIT_PAYMENT_CLUB');
-    store.saveProductType(chatId, 'club');
-    return {
-      messages: [{
-        text: m.MSG_TRIAL_CLOSED,
-        parseMode: 'HTML',
-        button: { label: m.BTN_TRIAL_CLOSED_PAY, callback: 'pay_club' },
-      }],
-    };
-  }
-
-  store.upsertUser(chatId, 'COMPLETED_CLUB');
-  store.setCompletedAt(chatId);
-  store.saveProductType(chatId, 'trial'); // в /stats конверсия видна отдельно; при оплате станет 'club'
-  store.setTrial(chatId, true);
-  store.setAutoRenew(chatId, true); // снимает club_cancel у «возвращенцев» — иначе ремайндеры их пропустят
-  const expires = store.startClubTrial(chatId); // календарный месяц от сейчас, expiry перезаписывается
-
-
-  const inviteUrl = await createInvite(chatId);
-  return {
-    messages: [{
-      text: m.MSG_TRIAL_JOINED(expires),
-      urlButton: { label: m.BTN_TRIAL_GO, url: inviteUrl },
-    }],
-  };
+// Платёж отклонён — предложить повторить (свежая ссылка по кнопке)
+function handlePaymentFailed() {
+  return { messages: [{ text: m.MSG_PAYMENT_FAILED, button: buyButton(m.BTN_RETRY) }] };
 }
 
-module.exports = { handleAction, handlePaymentSuccess, handleTrialJoin, AWAIT_STATES, COMPLETED_STATES };
+module.exports = { handleAction, handlePaymentSuccess, handlePaymentFailed };

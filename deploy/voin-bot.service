@@ -1,0 +1,16 @@
+[Unit]
+Description=Бот «Код Воина» (гайд 490 ₽)
+After=network-online.target fiproxy-tunnel.service
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/voin-bot
+ExecStart=/usr/local/bin/node index.js
+Environment=NODE_ENV=production
+Environment=TZ=Europe/Moscow
+Environment=NODE_NO_WARNINGS=1
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
