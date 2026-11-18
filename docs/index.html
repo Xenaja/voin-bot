@@ -103,14 +103,22 @@
       opacity: 0.75;
     }
 
+    /* Подсказка — заметная: без неё из TikTok непонятно, что делать с ником */
     .guide-hint {
+      font-size: 15px;
+      line-height: 1.4;
+      color: #d9d0c0;
+      margin-top: 10px;
+    }
+
+    .guide-alt {
       font-size: 12px;
       line-height: 1.45;
       color: #8a8275;
-      margin-top: 8px;
+      margin-top: 6px;
     }
 
-    .guide-hint a {
+    .guide-alt a {
       color: #c9a84c;
       text-decoration: none;
     }
@@ -370,10 +378,8 @@
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
         </svg>
       </button>
-      <p class="guide-hint">
-        Нажми, чтобы скопировать, затем вставь в поиск Telegram.<br>
-        Или открой сразу: <a href="https://t.me/VoinKodBot">t.me/VoinKodBot</a>
-      </p>
+      <p class="guide-hint">Нажми, чтобы скопировать, затем вставь в поиск Telegram.</p>
+      <p class="guide-alt">Или открой сразу: <a href="https://t.me/VoinKodBot">t.me/VoinKodBot</a></p>
     </div>
 
     <div class="support">
