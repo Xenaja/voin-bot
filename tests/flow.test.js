@@ -19,8 +19,8 @@ assert.equal(r.messages[0].button.callback, 'consent');
 r = flow.handleAction({ chatId: id, action: 'BTN_CONSENT' });
 assert.equal(store.getUser(id).state, 'AWAIT_PAYMENT_GUIDE');
 assert.ok(r.messages[0].banner, 'картинка над оффером');
-assert.match(r.messages[0].text, /690 рублей/);
-assert.equal(r.createPayment.label, 'Купить Код Воина за 690 ₽');
+assert.match(r.messages[0].text, /690 ₽/);
+assert.equal(r.createPayment.label, 'Купить Код Воина 2.0 за 690 ₽');
 assert.ok(store.getUser(id).offered_at);
 
 // повторное «Начать» не плодит оффер

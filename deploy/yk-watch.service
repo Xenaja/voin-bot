@@ -1,0 +1,10 @@
+[Unit]
+Description=Сторож магазина ЮKassa (Код Воина)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/voin-bot
+ExecStart=/usr/local/bin/node tools/yk-watch.js
+Environment=TZ=Europe/Moscow
+Environment=NODE_NO_WARNINGS=1

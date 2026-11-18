@@ -1,0 +1,10 @@
+[Unit]
+Description=Сторож ЮKassa раз в 5 минут
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

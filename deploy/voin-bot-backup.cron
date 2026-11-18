@@ -1,0 +1,2 @@
+# Бэкап базы «Код Воина» (/opt/voin-bot/deploy/backup.sh), 18.11.2026
+25 4 * * * root /opt/voin-bot/deploy/backup.sh >> /var/log/voin-bot-backup.log 2>&1

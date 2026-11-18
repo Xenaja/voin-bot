@@ -89,7 +89,9 @@ async function send(chatId, result) {
 async function sendWithPayment(chatId, result) {
   if (!result.createPayment) return send(chatId, result);
   const { label } = result.createPayment;
-  const amount = config.YOOKASSA_AMOUNT_GUIDE;
+  // ADMIN_TEST_AMOUNT в .env (например 1) — живая проверка оплаты: такая цена только у админов
+  const testAmount = Number(process.env.ADMIN_TEST_AMOUNT) || 0;
+  const amount = testAmount > 0 && isAdmin(Number(chatId)) ? testAmount : config.YOOKASSA_AMOUNT_GUIDE;
   // Заглушка оплаты для теста цепочки, пока нет ключей ЮKassa: только админам,
   // кнопка «Купить» сразу ведёт к выдаче PDF. Включается PAYMENT_STUB=true в .env.
   if (!config.YOOKASSA_SHOP_ID && config.PAYMENT_STUB && isAdmin(Number(chatId))) {
