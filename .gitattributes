@@ -1,0 +1,5 @@
+# Серверные файлы — только LF (bash/cron/systemd не понимают CRLF)
+*.sh text eol=lf
+*.cron text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
