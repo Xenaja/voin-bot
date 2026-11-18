@@ -64,28 +64,55 @@
       color: #c9a84c;
     }
 
-    /* Мерч — первый смысловой блок, до реквизитов */
-    .merch {
+    /* Гайд — первый смысловой блок, до реквизитов */
+    .guide {
       width: 100%;
       margin-top: 28px;
     }
 
-    /* Подпись над кнопкой — тем же голосом, что «Развиваю блог…» */
-    .merch-label {
+    .guide-label {
       font-size: 14px;
       line-height: 1.5;
       color: #d9d0c0;
       margin-bottom: 12px;
     }
 
-    /* Стрелка в конце строки — ведёт взгляд к кнопке */
-    .merch-arrow {
-      display: inline-block;
-      width: 15px;
-      height: 15px;
-      vertical-align: -3px;
-      margin-left: 5px;
-      color: rgba(201, 168, 76, 0.55);
+    /* Главная кнопка: копирует ник бота (из TikTok ссылки t.me не открываются) */
+    .copy.copy-main {
+      justify-content: center;
+      background: #c9a84c;
+      color: #0d0d0d;
+      border-color: #c9a84c;
+      padding: 13px 16px;
+      box-shadow: 0 0 22px rgba(201, 168, 76, 0.28);
+    }
+
+    .copy.copy-main:hover {
+      background: #d6b65a;
+    }
+
+    .copy.copy-main .copy-value {
+      flex: 0 1 auto;
+      text-align: center;
+      font-size: 18px;
+    }
+
+    .copy.copy-main svg {
+      width: 16px;
+      height: 16px;
+      opacity: 0.75;
+    }
+
+    .guide-hint {
+      font-size: 12px;
+      line-height: 1.45;
+      color: #8a8275;
+      margin-top: 8px;
+    }
+
+    .guide-hint a {
+      color: #c9a84c;
+      text-decoration: none;
     }
 
     .support {
@@ -198,7 +225,7 @@
       opacity: 0.85;
     }
 
-    /* Клуб — второстепенное действие: обводка, яркая заливка только у мерча */
+    /* Клуб — второстепенное действие: обводка, яркая заливка только у гайда */
     .btn-tg {
       background: transparent;
       color: #c9a84c;
@@ -208,14 +235,6 @@
     .btn-tg:hover {
       background: rgba(201, 168, 76, 0.1);
       opacity: 1;
-    }
-
-    /* Мерч выделяем ярко — сплошное золото, как кнопка клуба */
-    .btn-merch {
-      background-color: #c9a84c;
-      color: #0d0d0d;
-      white-space: nowrap;
-      box-shadow: 0 0 22px rgba(201, 168, 76, 0.28);
     }
 
     .btn svg {
@@ -236,8 +255,32 @@
       text-decoration: none;
     }
 
+    /* Ник клуба копируется, как реквизиты: из TikTok ссылки t.me не открываются */
+    .copy-inline {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 6px;
+      font: 600 13px 'Arial', sans-serif;
+      color: #c9a84c;
+      background: rgba(201, 168, 76, 0.08);
+      border: 1px solid rgba(201, 168, 76, 0.3);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+
+    .copy-inline svg {
+      width: 12px;
+      height: 12px;
+      opacity: 0.6;
+    }
+
     .toast {
       position: fixed;
+      width: max-content;
+      max-width: calc(100vw - 32px);
+      text-align: center;
       left: 50%;
       bottom: 24px;
       transform: translate(-50%, 10px);
@@ -278,7 +321,7 @@
         padding-bottom: 28px;
       }
 
-      .merch {
+      .guide {
         margin-top: 20px;
       }
 
@@ -286,7 +329,7 @@
         margin-top: 20px;
       }
 
-      .merch-label {
+      .guide-label {
         margin-bottom: 10px;
       }
 
@@ -315,14 +358,22 @@
     <div class="name">Саша Боцман</div>
     <div class="title">Код воина</div>
 
-    <div class="merch">
-      <div class="merch-label">Вдохновляющий мерч – футболка с посланием<svg class="merch-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v13M6 13l6 6 6-6"/></svg></div>
-      <a href="https://voblago.com/collaborations/voin" class="btn btn-merch" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>
+    <div class="guide">
+      <p class="guide-label">
+        Мой гайд «Код Воина 2.0»: личные истории и задания, которые помогают идти дальше.<br>
+        Забрать можно в Telegram-боте:
+      </p>
+      <button type="button" class="copy copy-main" data-copy="@VoinKodBot" data-toast="Скопировано — вставь в поиск Telegram">
+        <span class="copy-value">@VoinKodBot</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="12" height="12" rx="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
         </svg>
-        «Временные трудности»
-      </a>
+      </button>
+      <p class="guide-hint">
+        Нажми, чтобы скопировать, затем вставь в поиск Telegram.<br>
+        Или открой сразу: <a href="https://t.me/VoinKodBot">t.me/VoinKodBot</a>
+      </p>
     </div>
 
     <div class="support">
@@ -374,7 +425,8 @@
     </div>
 
     <p class="fallback">
-      Если ссылка не открылась: <a href="https://t.me/voinbotsman">@voinbotsman</a>
+      Если ссылка не открылась, скопируй и вставь в поиск Telegram:
+      <button type="button" class="copy-inline" data-copy="@voinbotsman" data-toast="Скопировано — вставь в поиск Telegram">@voinbotsman<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
     </p>
 
   </div>
@@ -387,7 +439,8 @@
       var toast = document.getElementById('toast');
       var timer = null;
 
-      function showToast() {
+      function showToast(text) {
+        toast.textContent = text || 'Скопировано';
         toast.classList.add('show');
         clearTimeout(timer);
         timer = setTimeout(function () { toast.classList.remove('show'); }, 1500);
@@ -409,14 +462,16 @@
         var btn = e.target.closest('[data-copy]');
         if (!btn) return;
         var value = btn.getAttribute('data-copy');
+        var text = btn.getAttribute('data-toast');
+        var done = function () { showToast(text); };
         if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(value).then(showToast, function () {
+          navigator.clipboard.writeText(value).then(done, function () {
             fallbackCopy(value);
-            showToast();
+            done();
           });
         } else {
           fallbackCopy(value);
-          showToast();
+          done();
         }
       });
     })();
